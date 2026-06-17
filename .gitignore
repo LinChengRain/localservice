@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+
+# Database
+*.db
+
+# Uploads
+uploads/*.ipa
+uploads/*.png
+uploads/*.jpg
+uploads/*.jpeg
+
+# Certificates
+certs/*.key
+certs/*.crt
+
+# Logs
+*.log
+server.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

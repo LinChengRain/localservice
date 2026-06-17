@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}上传应用{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-header-left">
+        <h1>上传应用</h1>
+        <p class="subtitle">上传企业签名的 IPA 文件</p>
+    </div>
+    <a href="{{ url_for('index') }}" class="btn btn-ghost">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        返回
+    </a>
+</div>
+
+<div class="upload-form">
+    <form action="{{ url_for('upload') }}" method="POST" enctype="multipart/form-data" id="uploadForm">
+        <div class="form-group">
+            <label for="ipa_file">IPA 文件 *</label>
+            <div class="file-input-wrapper">
+                <input type="file" id="ipa_file" name="ipa_file" accept=".ipa" required>
+                <div class="file-input-hint" id="fileHint">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <span>点击选择或拖拽 IPA 文件</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-loading" id="loadingIndicator" style="display: none;">
+            <div class="spinner"></div>
+            <span>正在解析...</span>
+        </div>
+
+        <div class="icon-preview" id="iconPreview" style="display: none;">
+            <img id="iconImg" src="" alt="应用图标">
+            <span class="icon-label">已提取图标</span>
+        </div>
+
+        <div class="form-group">
+            <label for="name">应用名称 *</label>
+            <input type="text" id="name" name="name" required placeholder="将自动填充">
+        </div>
+
+        <div class="form-group">
+            <label for="bundle_id">Bundle ID *</label>
+            <input type="text" id="bundle_id" name="bundle_id" required placeholder="将自动填充">
+        </div>
+
+        <div class="form-group">
+            <label for="version">版本号</label>
+            <input type="text" id="version" name="version" placeholder="将自动填充">
+        </div>
+
+        <div class="form-group">
+            <label for="description">描述</label>
+            <textarea id="description" name="description" rows="2" placeholder="可选：应用简介"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="icon_file">应用图标</label>
+            <input type="file" id="icon_file" name="icon_file" accept=".png,.jpg,.jpeg">
+            <p class="help-text">已从 IPA 自动提取，也可手动覆盖</p>
+        </div>
+
+        <input type="hidden" id="extracted_icon" name="extracted_icon" value="">
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="submitBtn" disabled>上传</button>
+        </div>
+    </form>
+</div>
+
+<div class="info-box">
+    <h3>注意事项</h3>
+    <ul>
+        <li>IPA 必须使用企业证书签名</li>
+        <li>Bundle ID 需与 IPA 中一致</li>
+        <li>上传后自动生成安装链接</li>
+    </ul>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+document.getElementById('ipa_file').addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+
+    document.getElementById('fileHint').innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34c759" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>' + file.name + '</span>';
+    document.getElementById('loadingIndicator').style.display = 'flex';
+    document.getElementById('submitBtn').disabled = true;
+    document.getElementById('iconPreview').style.display = 'none';
+
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        JSZip.loadAsync(e.target.result).then(function(zip) {
+            var paths = Object.keys(zip.files);
+            var plistPath = null;
+            var iconPath = null;
+
+            var iconPatterns = ['AppIcon60x60@2x.png', 'AppIcon60x60@3x.png', 'AppIcon-60@2x.png', 'AppIcon.png'];
+
+            for (var i = 0; i < paths.length; i++) {
+                if (paths[i].match(/Payload\/[^/]+\.app\/Info\.plist$/)) {
+                    plistPath = paths[i];
+                    break;
+                }
+            }
+
+            for (var i = 0; i < iconPatterns.length; i++) {
+                for (var j = 0; j < paths.length; j++) {
+                    if (paths[j].endsWith(iconPatterns[i])) {
+                        iconPath = paths[j];
+                        break;
+                    }
+                }
+                if (iconPath) break;
+            }
+
+            if (!iconPath) {
+                for (var i = 0; i < paths.length; i++) {
+                    if (paths[i].includes('AppIcon') && paths[i].endsWith('.png') && !paths[i].includes('@')) {
+                        iconPath = paths[i];
+                        break;
+                    }
+                }
+            }
+
+            var promises = [];
+
+            if (plistPath) {
+                promises.push(zip.file(plistPath).async('string').then(function(xml) {
+                    var parser = new DOMParser();
+                    var doc = parser.parseFromString(xml, 'text/xml');
+                    var dicts = doc.querySelectorAll('dict');
+                    var mainDict = null;
+
+                    for (var i = 0; i < dicts.length; i++) {
+                        var keys = dicts[i].querySelectorAll('key');
+                        for (var j = 0; j < keys.length; j++) {
+                            if (keys[j].textContent === 'CFBundleIdentifier') {
+                                mainDict = dicts[i];
+                                break;
+                            }
+                        }
+                        if (mainDict) break;
+                    }
+
+                    if (mainDict) {
+                        function getValue(keyName) {
+                            var keys = mainDict.querySelectorAll('key');
+                            for (var i = 0; i < keys.length; i++) {
+                                if (keys[i].textContent === keyName) {
+                                    var next = keys[i].nextElementSibling;
+                                    if (next && next.tagName === 'string') return next.textContent;
+                                }
+                            }
+                            return '';
+                        }
+
+                        document.getElementById('name').value = getValue('CFBundleDisplayName') || getValue('CFBundleName') || '';
+                        document.getElementById('bundle_id').value = getValue('CFBundleIdentifier') || '';
+                        document.getElementById('version').value = getValue('CFBundleShortVersionString') || getValue('CFBundleVersion') || '';
+                    }
+                }));
+            }
+
+            if (iconPath) {
+                promises.push(zip.file(iconPath).async('base64').then(function(data) {
+                    var dataUrl = 'data:image/png;base64,' + data;
+                    document.getElementById('iconImg').src = dataUrl;
+                    document.getElementById('iconPreview').style.display = 'flex';
+                    document.getElementById('extracted_icon').value = dataUrl;
+                }));
+            }
+
+            return Promise.all(promises);
+        }).then(function() {
+            document.getElementById('loadingIndicator').style.display = 'none';
+            document.getElementById('submitBtn').disabled = false;
+        }).catch(function(err) {
+            document.getElementById('loadingIndicator').style.display = 'none';
+            alert('解析失败: ' + err.message);
+        });
+    };
+    reader.readAsArrayBuffer(file);
+});
+</script>
+
+<style>
+.icon-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+    background: var(--success-bg);
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(52,199,89,0.2);
+}
+
+.icon-preview img {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    object-fit: cover;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.icon-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--success);
+}
+</style>
+{% endblock %}
