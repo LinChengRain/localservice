@@ -357,7 +357,8 @@ body {
 .app-row-meta {
     display: flex;
     gap: 0.875rem;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow: hidden;
 }
 
 .meta-item {
@@ -366,6 +367,9 @@ body {
     gap: 0.25rem;
     font-size: 0.8125rem;
     color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .app-row-desc {
@@ -1099,6 +1103,14 @@ body {
     .app-row-icon {
         width: 48px;
         height: 48px;
+    }
+
+    .app-row-meta {
+        gap: 0.625rem;
+    }
+
+    .meta-item {
+        font-size: 0.75rem;
     }
 
     .app-row-actions {
