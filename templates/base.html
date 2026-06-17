@@ -17,7 +17,9 @@
         </div>
         <div class="nav-links">
             <a href="{{ url_for('index') }}">应用</a>
+            {% if is_lan %}
             <a href="{{ url_for('upload') }}">上传</a>
+            {% endif %}
             <a href="{{ url_for('download_cert') }}">证书</a>
         </div>
     </nav>

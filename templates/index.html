@@ -8,12 +8,14 @@
         <h1>应用分发</h1>
         <p class="subtitle">企业内部应用分发平台</p>
     </div>
+    {% if is_lan %}
     <a href="{{ url_for('upload') }}" class="btn btn-primary">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
         </svg>
         上传应用
     </a>
+    {% endif %}
 </div>
 
 {% if not is_lan %}
