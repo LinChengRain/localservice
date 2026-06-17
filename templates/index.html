@@ -18,17 +18,6 @@
     {% endif %}
 </div>
 
-{% if not is_lan %}
-<div class="notice-bar">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12" y2="16"/>
-    </svg>
-    <span>当前通过公网访问，上传大文件建议使用局域网地址 <code>{{ lan_url }}</code></span>
-</div>
-{% endif %}
-
 {% if apps %}
 <div class="apps-list">
     {% for app in apps %}
