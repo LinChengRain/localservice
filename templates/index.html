@@ -16,14 +16,18 @@
     </a>
 </div>
 
-{% if apps %}
-<div class="stats-bar">
-    <div class="stat-item">
-        <span class="stat-number">{{ apps|length }}</span>
-        <span class="stat-label">应用总数</span>
-    </div>
+{% if not is_lan %}
+<div class="notice-bar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12" y2="16"/>
+    </svg>
+    <span>当前通过公网访问，上传大文件建议使用局域网地址 <code>{{ lan_url }}</code></span>
 </div>
+{% endif %}
 
+{% if apps %}
 <div class="apps-list">
     {% for app in apps %}
     <a href="{{ url_for('install', app_id=app.id) }}" class="app-row">
@@ -79,41 +83,6 @@
         </div>
     </a>
     {% endfor %}
-</div>
-
-<div class="guide-section">
-    <h2>快速上手</h2>
-    <div class="guide-steps">
-        <div class="guide-step">
-            <div class="step-number">1</div>
-            <div class="step-content">
-                <h4>下载并安装证书</h4>
-                <p>首次使用需在iOS设备上安装信任证书</p>
-                <a href="{{ url_for('download_cert') }}" class="btn btn-cert">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="7 10 12 15 17 10"/>
-                        <line x1="12" y1="15" x2="12" y2="3"/>
-                    </svg>
-                    下载证书
-                </a>
-            </div>
-        </div>
-        <div class="guide-step">
-            <div class="step-number">2</div>
-            <div class="step-content">
-                <h4>开启完全信任</h4>
-                <p>设置 → 通用 → 关于本机 → 证书信任设置</p>
-            </div>
-        </div>
-        <div class="guide-step">
-            <div class="step-number">3</div>
-            <div class="step-content">
-                <h4>安装应用</h4>
-                <p>点击应用卡片，按提示完成安装</p>
-            </div>
-        </div>
-    </div>
 </div>
 
 {% else %}

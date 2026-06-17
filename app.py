@@ -122,6 +122,30 @@ def get_server_ip():
         s.close()
     return ip
 
+def get_lan_ip():
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+    except:
+        ip = '127.0.0.1'
+    finally:
+        s.close()
+    return ip
+
+@app.context_processor
+def inject_globals():
+    server_ip = get_server_ip()
+    lan_ip = get_lan_ip()
+    is_lan = request.host and (request.host.startswith('127.') or request.host.startswith(lan_ip) or request.host == 'localhost')
+    return {
+        'server_ip': server_ip,
+        'lan_ip': lan_ip,
+        'is_lan': is_lan,
+        'lan_url': f'http://{lan_ip}:8080',
+    }
+
 @app.route('/')
 def index():
     db = get_db()
