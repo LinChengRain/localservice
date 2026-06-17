@@ -21,6 +21,15 @@
             <a href="{{ url_for('upload') }}">上传</a>
             {% endif %}
             <a href="{{ url_for('download_cert') }}">证书</a>
+            <button class="btn-nav-icon" id="showQrBtn" title="显示二维码">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="2" width="8" height="8" rx="1"/>
+                    <rect x="14" y="2" width="8" height="8" rx="1"/>
+                    <rect x="2" y="14" width="8" height="8" rx="1"/>
+                    <rect x="14" y="14" width="4" height="4"/>
+                    <rect x="20" y="20" width="2" height="2"/>
+                </svg>
+            </button>
         </div>
     </nav>
 
@@ -38,8 +47,67 @@
         {% block content %}{% endblock %}
     </div>
 
+    <div class="qr-modal" id="qrModal">
+        <div class="qr-modal-content">
+            <div class="qr-modal-header">
+                <h3>扫码访问</h3>
+                <button class="qr-modal-close" id="closeQrBtn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="qr-modal-body">
+                <div id="qrCodeModal"></div>
+                <p class="qr-modal-hint">使用手机扫描二维码访问</p>
+                <p class="qr-modal-url" id="qrUrl"></p>
+            </div>
+        </div>
+    </div>
+
     <footer class="footer">
         <p>企业应用分发平台</p>
     </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script>
+        var qrModal = document.getElementById('qrModal');
+        var showQrBtn = document.getElementById('showQrBtn');
+        var closeQrBtn = document.getElementById('closeQrBtn');
+        var qrUrl = document.getElementById('qrUrl');
+        var qrCodeModal = document.getElementById('qrCodeModal');
+        var currentUrl = window.location.href;
+        var qrInstance = null;
+
+        showQrBtn.addEventListener('click', function() {
+            qrUrl.textContent = currentUrl;
+            qrModal.classList.add('active');
+
+            if (qrInstance) {
+                qrInstance.clear();
+                qrInstance.makeCode(currentUrl);
+            } else {
+                qrInstance = new QRCode(qrCodeModal, {
+                    text: currentUrl,
+                    width: 180,
+                    height: 180,
+                    colorDark: '#1c1c1e',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            }
+        });
+
+        closeQrBtn.addEventListener('click', function() {
+            qrModal.classList.remove('active');
+        });
+
+        qrModal.addEventListener('click', function(e) {
+            if (e.target === qrModal) {
+                qrModal.classList.remove('active');
+            }
+        });
+    </script>
 </body>
 </html>
