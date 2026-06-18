@@ -42,8 +42,8 @@
 
         {% if app.platform == 'harmonyos' %}
         <div class="install-actions">
-            {% set harmony_manifest_url = "https://" ~ server_ip ~ "/manifest-harmony/" ~ app.id %}
-            {% set deeplink = "store://enterprise/manifest?url=" ~ harmony_manifest_url %}
+            {% set harmony_manifest_url = "https://" ~ server_ip ~ "/manifest-harmony/" ~ app.id ~ ".json5" %}
+            {% set deeplink = "store://enterprise/manifest?url=" ~ harmony_manifest_url | urlencode %}
             <a href="{{ deeplink }}" class="btn-install-main">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -107,8 +107,8 @@
     <div class="install-section">
         <h3 class="section-title">安装链接</h3>
         <p class="section-desc">如一键安装不工作，复制下方链接到鸿蒙系统浏览器地址栏：</p>
-        {% set harmony_manifest_url = "https://" ~ server_ip ~ "/manifest-harmony/" ~ app.id %}
-        {% set deeplink = "store://enterprise/manifest?url=" ~ harmony_manifest_url %}
+        {% set harmony_manifest_url = "https://" ~ server_ip ~ "/manifest-harmony/" ~ app.id ~ ".json5" %}
+        {% set deeplink = "store://enterprise/manifest?url=" ~ harmony_manifest_url | urlencode %}
         <div class="code-copy">
             <code id="manifest-url">{{ deeplink }}</code>
             <button class="btn-copy" onclick="copyUrl()">
@@ -197,7 +197,7 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
     {% if app.platform == 'harmonyos' %}
-    var harmony_manifest_url = "https://{{ server_ip }}/manifest-harmony/{{ app.id }}";
+    var harmony_manifest_url = "https://{{ server_ip }}/manifest-harmony/{{ app.id }}.json5";
     var installUrl = "store://enterprise/manifest?url=" + encodeURIComponent(harmony_manifest_url);
     {% else %}
     var installUrl = "itms-services://?action=download-manifest&url={{ ('https://' ~ server_ip ~ '/manifest/' ~ app.id) | urlencode }}";

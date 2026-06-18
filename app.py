@@ -166,12 +166,19 @@ def extract_icon_from_hap(hap_path, output_dir, timestamp):
     return None
 
 def parse_hap_metadata(hap_path):
-    """Parse module.json from HAP file to get metadata"""
+    """Parse module.json and pack.info from HAP file to get metadata"""
     try:
         import zipfile
         
         with zipfile.ZipFile(hap_path, 'r') as z:
-            # Read module.json
+            # Read pack.info for versionCode (more reliable source)
+            pack_info = None
+            for name in z.namelist():
+                if name == 'pack.info':
+                    pack_info = json.loads(z.read(name))
+                    break
+            
+            # Read module.json for other metadata
             module_data = None
             for name in z.namelist():
                 if name == 'module.json':
@@ -182,29 +189,32 @@ def parse_hap_metadata(hap_path):
                 return None
             
             app_info = module_data.get('app', {})
-            module_info = module_data.get('module', {})
             
             # Get app name - prefer non-localization reference
             name = ''
             label = app_info.get('label', '')
-            
-            # If label is not a localization reference, use it directly
             if label and not label.startswith('$string:'):
                 name = label
-            
-            # Fallback to bundleName
             if not name:
                 name = app_info.get('bundleName', '')
             
             # Get bundle ID
             bundle_id = app_info.get('bundleName', '')
             
-            # Get version
+            # Get version - prefer pack.info for versionCode
             version = app_info.get('versionName', '')
-            build_number = str(app_info.get('versionCode', ''))
+            build_number = ''
+            
+            if pack_info:
+                summary_app = pack_info.get('summary', {}).get('app', {})
+                version_info = summary_app.get('version', {})
+                build_number = str(version_info.get('code', ''))
+            
+            if not build_number:
+                build_number = str(app_info.get('versionCode', ''))
             
             # Get icon reference
-            icon_ref = app_info.get('icon', '') or module_info.get('icon', '')
+            icon_ref = app_info.get('icon', '')
             
             return {
                 'name': name,
@@ -280,6 +290,12 @@ def inject_globals():
     lan_ip = get_lan_ip()
     is_lan = request.host and (request.host.startswith('127.') or request.host.startswith(lan_ip) or request.host == 'localhost')
     client_platform = detect_platform()
+    
+    # Use request host for URL generation to support cloudflared/ngrok
+    host = request.host
+    if host and not host.startswith('127.') and not host.startswith('localhost'):
+        server_ip = host
+    
     return {
         'server_ip': server_ip,
         'lan_ip': lan_ip,
@@ -354,17 +370,37 @@ def upload():
 
             # Auto-increment build_number for same bundle_id + version
             db = get_db()
-            existing = db.execute(
-                'SELECT build_number FROM apps WHERE bundle_id = ? AND version = ? ORDER BY CAST(build_number AS INTEGER) DESC LIMIT 1',
-                (bundle_id, version)
-            ).fetchone()
-            if existing and existing['build_number']:
-                try:
-                    build_number = str(int(existing['build_number']) + 1)
-                except ValueError:
-                    build_number = '1'
+            
+            # For HAP files, try to get versionCode from pack.info
+            if platform == 'harmonyos':
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                hap_meta = parse_hap_metadata(file_path)
+                if hap_meta and hap_meta.get('build_number'):
+                    build_number = hap_meta['build_number']
+                else:
+                    existing = db.execute(
+                        'SELECT build_number FROM apps WHERE bundle_id = ? AND version = ? ORDER BY CAST(build_number AS INTEGER) DESC LIMIT 1',
+                        (bundle_id, version)
+                    ).fetchone()
+                    if existing and existing['build_number']:
+                        try:
+                            build_number = str(int(existing['build_number']) + 1)
+                        except ValueError:
+                            build_number = '1'
+                    else:
+                        build_number = '1'
             else:
-                build_number = '1'
+                existing = db.execute(
+                    'SELECT build_number FROM apps WHERE bundle_id = ? AND version = ? ORDER BY CAST(build_number AS INTEGER) DESC LIMIT 1',
+                    (bundle_id, version)
+                ).fetchone()
+                if existing and existing['build_number']:
+                    try:
+                        build_number = str(int(existing['build_number']) + 1)
+                    except ValueError:
+                        build_number = '1'
+                else:
+                    build_number = '1'
             db.close()
             
             icon_filename = None
@@ -441,7 +477,13 @@ def install(app_id):
         flash('应用不存在')
         return redirect(url_for('index'))
     
-    server_ip = get_server_ip()
+    # Use request host for URL generation to support cloudflared/ngrok
+    host = request.host
+    if host.startswith('127.') or host.startswith('localhost'):
+        server_ip = get_server_ip()
+    else:
+        server_ip = host
+    
     return render_template('install.html', app=app_data, server_ip=server_ip)
 
 @app.route('/manifest/<int:app_id>')
@@ -453,7 +495,12 @@ def manifest(app_id):
     if not app_data:
         return 'App not found', 404
     
-    server_ip = get_server_ip()
+    # Use request host for URL generation to support cloudflared/ngrok
+    host = request.host
+    if host.startswith('127.') or host.startswith('localhost'):
+        server_ip = get_server_ip()
+    else:
+        server_ip = host
     
     manifest_data = {
         'items': [{
@@ -502,7 +549,14 @@ def manifest_harmony(app_id):
     if not app_data:
         return 'App not found', 404
     
-    server_ip = get_server_ip()
+    # Use request host for URL generation to support cloudflared/ngrok
+    host = request.host
+    if host.startswith('127.') or host.startswith('localhost'):
+        server_ip = get_server_ip()
+    else:
+        server_ip = host
+    
+    deploy_domain = f'https://{server_ip}'
     hap_path = os.path.join(app.config['UPLOAD_FOLDER'], app_data['filename'])
     
     manifest_data = {
@@ -512,10 +566,10 @@ def manifest_harmony(app_id):
             'versionCode': int(app_data['build_number']) if app_data['build_number'] else 1,
             'versionName': app_data['version'],
             'label': app_data['name'],
-            'deployDomain': f'https://{server_ip}',
+            'deployDomain': deploy_domain,
             'icons': {
-                'normal': f'https://{server_ip}/download/{app_data["icon_filename"]}' if app_data['icon_filename'] else '',
-                'large': f'https://{server_ip}/download/{app_data["icon_filename"]}' if app_data['icon_filename'] else '',
+                'normal': f'{deploy_domain}/download/{app_data["icon_filename"]}' if app_data['icon_filename'] else '',
+                'large': f'{deploy_domain}/download/{app_data["icon_filename"]}' if app_data['icon_filename'] else '',
             },
             'minAPIVersion': '4.1.0(11)',
             'targetAPIVersion': '4.1.0(11)',
@@ -523,7 +577,59 @@ def manifest_harmony(app_id):
                 'name': 'entry',
                 'type': 'entry',
                 'deviceTypes': ['phone', 'tablet'],
-                'packageUrl': f'https://{server_ip}/download/{app_data["filename"]}',
+                'packageUrl': f'{deploy_domain}/download/{app_data["filename"]}',
+                'packageHash': file_sha256(hap_path) if os.path.exists(hap_path) else '',
+            }]
+        }
+    }
+    
+    response = app.response_class(
+        response=json.dumps(manifest_data, indent=2, ensure_ascii=False),
+        status=200,
+        mimetype='application/json'
+    )
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
+
+@app.route('/manifest-harmony/<int:app_id>.json5')
+def manifest_harmony_json5(app_id):
+    """Serve HarmonyOS manifest as .json5 file"""
+    db = get_db()
+    app_data = db.execute('SELECT * FROM apps WHERE id = ?', (app_id,)).fetchone()
+    db.close()
+    
+    if not app_data:
+        return 'App not found', 404
+    
+    # Use request host for URL generation to support cloudflared/ngrok
+    host = request.host
+    if host.startswith('127.') or host.startswith('localhost'):
+        server_ip = get_server_ip()
+    else:
+        server_ip = host
+    
+    deploy_domain = f'https://{server_ip}'
+    hap_path = os.path.join(app.config['UPLOAD_FOLDER'], app_data['filename'])
+    
+    manifest_data = {
+        'app': {
+            'bundleName': app_data['bundle_id'],
+            'bundleType': 'app',
+            'versionCode': int(app_data['build_number']) if app_data['build_number'] else 1,
+            'versionName': app_data['version'],
+            'label': app_data['name'],
+            'deployDomain': server_ip,
+            'icons': {
+                'normal': f'{deploy_domain}/download/{app_data["icon_filename"]}' if app_data['icon_filename'] else '',
+                'large': f'{deploy_domain}/download/{app_data["icon_filename"]}' if app_data['icon_filename'] else '',
+            },
+            'minAPIVersion': '5.0.0(12)',
+            'targetAPIVersion': '5.0.0(12)',
+            'modules': [{
+                'name': 'entry',
+                'type': 'entry',
+                'deviceTypes': ['phone'],
+                'packageUrl': f'{deploy_domain}/download/{app_data["filename"]}',
                 'packageHash': file_sha256(hap_path) if os.path.exists(hap_path) else '',
             }]
         }
