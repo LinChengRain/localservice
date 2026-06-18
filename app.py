@@ -2,6 +2,7 @@ import os
 import sqlite3
 import subprocess
 import json
+import hashlib
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, send_from_directory, jsonify, flash
 from werkzeug.utils import secure_filename
@@ -14,7 +15,7 @@ app.config['CERT_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file_
 app.config['DATABASE'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'apps.db')
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max
 
-ALLOWED_EXTENSIONS = {'ipa', 'png', 'jpg', 'jpeg'}
+ALLOWED_EXTENSIONS = {'ipa', 'hap', 'png', 'jpg', 'jpeg'}
 
 def get_db():
     db = sqlite3.connect(app.config['DATABASE'])
@@ -34,11 +35,12 @@ def init_db():
             icon_filename TEXT,
             description TEXT,
             build_number TEXT DEFAULT '',
-            build_type TEXT DEFAULT 'release'
+            build_type TEXT DEFAULT 'release',
+            platform TEXT DEFAULT 'ios'
         )
     ''')
     # Add columns if missing (migration for existing DB)
-    for col, default in [("build_number", "''"), ("build_type", "'release'")]:
+    for col, default in [("build_number", "''"), ("build_type", "'release'"), ("platform", "'ios'")]:
         try:
             db.execute(f"ALTER TABLE apps ADD COLUMN {col} TEXT DEFAULT {default}")
         except:
@@ -94,6 +96,127 @@ def extract_icon_from_ipa(ipa_path, output_dir, timestamp):
         print(f"Error extracting icon: {e}")
         return None
 
+def file_sha256(filepath):
+    """Calculate SHA256 hash of a file"""
+    sha256 = hashlib.sha256()
+    with open(filepath, 'rb') as f:
+        for chunk in iter(lambda: f.read(8192), b''):
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+def extract_icon_from_hap(hap_path, output_dir, timestamp):
+    """Extract app icon from HAP file"""
+    try:
+        import zipfile
+        
+        with zipfile.ZipFile(hap_path, 'r') as z:
+            # First try to find icon from module.json reference
+            for name in z.namelist():
+                if name == 'module.json':
+                    data = json.loads(z.read(name))
+                    icon_ref = data.get('app', {}).get('icon', '') or data.get('module', {}).get('icon', '')
+                    
+                    if icon_ref.startswith('$media:'):
+                        # Resolve media reference - look for the file directly
+                        media_name = icon_ref.replace('$media:', '')
+                        # Try common locations
+                        for path in [
+                            f'resources/base/media/{media_name}.png',
+                            f'resources/base/media/{media_name}.jpg',
+                            f'resources/base/media/{media_name}.webp',
+                        ]:
+                            if path in z.namelist():
+                                icon_data = z.read(path)
+                                if len(icon_data) > 1000:
+                                    icon_filename = f"{timestamp}icon.png"
+                                    icon_path = os.path.join(output_dir, icon_filename)
+                                    with open(icon_path, 'wb') as f:
+                                        f.write(icon_data)
+                                    return icon_filename
+                    break
+            
+            # Fallback: look for app_icon.png or icon.png in common locations
+            fallback_paths = [
+                'resources/base/media/app_icon.png',
+                'resources/base/media/icon.png',
+            ]
+            for path in fallback_paths:
+                if path in z.namelist():
+                    icon_data = z.read(path)
+                    if len(icon_data) > 1000:
+                        icon_filename = f"{timestamp}icon.png"
+                        icon_path = os.path.join(output_dir, icon_filename)
+                        with open(icon_path, 'wb') as f:
+                            f.write(icon_data)
+                        return icon_filename
+            
+            # Last fallback: search for any icon file in media directory
+            for name in z.namelist():
+                if 'media' in name and name.endswith(('.png', '.jpg', '.webp')):
+                    if 'icon' in name.lower() or 'app' in name.lower():
+                        icon_data = z.read(name)
+                        if len(icon_data) > 1000:
+                            icon_filename = f"{timestamp}icon.png"
+                            icon_path = os.path.join(output_dir, icon_filename)
+                            with open(icon_path, 'wb') as f:
+                                f.write(icon_data)
+                            return icon_filename
+    except Exception as e:
+        print(f"Error extracting HAP icon: {e}")
+    return None
+
+def parse_hap_metadata(hap_path):
+    """Parse module.json from HAP file to get metadata"""
+    try:
+        import zipfile
+        
+        with zipfile.ZipFile(hap_path, 'r') as z:
+            # Read module.json
+            module_data = None
+            for name in z.namelist():
+                if name == 'module.json':
+                    module_data = json.loads(z.read(name))
+                    break
+            
+            if not module_data:
+                return None
+            
+            app_info = module_data.get('app', {})
+            module_info = module_data.get('module', {})
+            
+            # Get app name - prefer non-localization reference
+            name = ''
+            label = app_info.get('label', '')
+            
+            # If label is not a localization reference, use it directly
+            if label and not label.startswith('$string:'):
+                name = label
+            
+            # Fallback to bundleName
+            if not name:
+                name = app_info.get('bundleName', '')
+            
+            # Get bundle ID
+            bundle_id = app_info.get('bundleName', '')
+            
+            # Get version
+            version = app_info.get('versionName', '')
+            build_number = str(app_info.get('versionCode', ''))
+            
+            # Get icon reference
+            icon_ref = app_info.get('icon', '') or module_info.get('icon', '')
+            
+            return {
+                'name': name,
+                'bundle_id': bundle_id,
+                'version': version,
+                'build_number': build_number,
+                'icon_ref': icon_ref,
+            }
+    except Exception as e:
+        print(f"Error parsing HAP metadata: {e}")
+    return None
+
 def generate_certificates(cn):
     cert_path = os.path.join(app.config['CERT_FOLDER'], 'local.crt')
     key_path = os.path.join(app.config['CERT_FOLDER'], 'local.key')
@@ -142,22 +265,42 @@ def get_lan_ip():
         s.close()
     return ip
 
+def detect_platform():
+    """Detect device platform from User-Agent"""
+    ua = request.headers.get('User-Agent', '').lower()
+    if 'iphone' in ua or 'ipad' in ua:
+        return 'ios'
+    elif 'harmony' in ua or 'hmos' in ua:
+        return 'harmonyos'
+    return 'all'
+
 @app.context_processor
 def inject_globals():
     server_ip = get_server_ip()
     lan_ip = get_lan_ip()
     is_lan = request.host and (request.host.startswith('127.') or request.host.startswith(lan_ip) or request.host == 'localhost')
+    client_platform = detect_platform()
     return {
         'server_ip': server_ip,
         'lan_ip': lan_ip,
         'is_lan': is_lan,
         'lan_url': f'http://{lan_ip}:8080',
+        'client_platform': client_platform,
     }
 
 @app.route('/')
 def index():
+    platform = detect_platform()
+    filter_platform = request.args.get('platform', '')
+    
     db = get_db()
-    apps = db.execute('SELECT * FROM apps ORDER BY upload_time DESC').fetchall()
+    # Filter by platform if on mobile, or if filter is specified
+    if platform != 'all':
+        apps = db.execute('SELECT * FROM apps WHERE platform = ? ORDER BY upload_time DESC', (platform,)).fetchall()
+    elif filter_platform and filter_platform in ('ios', 'harmonyos'):
+        apps = db.execute('SELECT * FROM apps WHERE platform = ? ORDER BY upload_time DESC', (filter_platform,)).fetchall()
+    else:
+        apps = db.execute('SELECT * FROM apps ORDER BY upload_time DESC').fetchall()
     
     # Group apps by bundle_id
     grouped = {}
@@ -168,6 +311,7 @@ def index():
                 'bundle_id': bid,
                 'name': app['name'],
                 'icon_filename': app['icon_filename'],
+                'platform': app['platform'],
                 'versions': {}
             }
         
@@ -198,6 +342,9 @@ def upload():
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_')
             filename = timestamp + filename
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            
+            # Detect platform from file extension
+            platform = 'harmonyos' if filename.lower().endswith('.hap') else 'ios'
             
             name = request.form.get('name', '')
             bundle_id = request.form.get('bundle_id', '')
@@ -241,15 +388,18 @@ def upload():
                 except:
                     pass
             
-            # If no icon, try to extract from IPA
+            # If no icon, try to extract from file
             if not icon_filename:
-                ipa_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                icon_filename = extract_icon_from_ipa(ipa_path, app.config['UPLOAD_FOLDER'], timestamp)
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                if platform == 'harmonyos':
+                    icon_filename = extract_icon_from_hap(file_path, app.config['UPLOAD_FOLDER'], timestamp)
+                else:
+                    icon_filename = extract_icon_from_ipa(file_path, app.config['UPLOAD_FOLDER'], timestamp)
             
             db = get_db()
             db.execute(
-                'INSERT INTO apps (name, bundle_id, version, filename, icon_filename, description, build_number, build_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                (name, bundle_id, version, filename, icon_filename, description, build_number, build_type)
+                'INSERT INTO apps (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform)
             )
             db.commit()
             db.close()
@@ -310,15 +460,15 @@ def manifest(app_id):
             'assets': [
                 {
                     'kind': 'software-package',
-                    'url': f'https://{server_ip}:8443/download/{app_data["filename"]}'
+                    'url': f'https://{server_ip}/download/{app_data["filename"]}'
                 },
                 {
                     'kind': 'display-image',
-                    'url': f'https://{server_ip}:8443/download/{app_data["icon_filename"]}' if app_data['icon_filename'] else f'https://{server_ip}:8443/static/icon.png'
+                    'url': f'https://{server_ip}/download/{app_data["icon_filename"]}' if app_data['icon_filename'] else f'https://{server_ip}/static/icon.png'
                 },
                 {
                     'kind': 'full-size-image',
-                    'url': f'https://{server_ip}:8443/download/{app_data["icon_filename"]}' if app_data['icon_filename'] else f'https://{server_ip}:8443/static/icon.png'
+                    'url': f'https://{server_ip}/download/{app_data["icon_filename"]}' if app_data['icon_filename'] else f'https://{server_ip}/static/icon.png'
                 }
             ],
             'metadata': {
@@ -340,6 +490,51 @@ def manifest(app_id):
     )
     response.headers['Content-Type'] = 'application/xml; charset=utf-8'
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return response
+
+@app.route('/manifest-harmony/<int:app_id>')
+def manifest_harmony(app_id):
+    """Generate HarmonyOS enterprise distribution manifest JSON5"""
+    db = get_db()
+    app_data = db.execute('SELECT * FROM apps WHERE id = ?', (app_id,)).fetchone()
+    db.close()
+    
+    if not app_data:
+        return 'App not found', 404
+    
+    server_ip = get_server_ip()
+    hap_path = os.path.join(app.config['UPLOAD_FOLDER'], app_data['filename'])
+    
+    manifest_data = {
+        'app': {
+            'bundleName': app_data['bundle_id'],
+            'bundleType': 'app',
+            'versionCode': int(app_data['build_number']) if app_data['build_number'] else 1,
+            'versionName': app_data['version'],
+            'label': app_data['name'],
+            'deployDomain': f'https://{server_ip}',
+            'icons': {
+                'normal': f'https://{server_ip}/download/{app_data["icon_filename"]}' if app_data['icon_filename'] else '',
+                'large': f'https://{server_ip}/download/{app_data["icon_filename"]}' if app_data['icon_filename'] else '',
+            },
+            'minAPIVersion': '4.1.0(11)',
+            'targetAPIVersion': '4.1.0(11)',
+            'modules': [{
+                'name': 'entry',
+                'type': 'entry',
+                'deviceTypes': ['phone', 'tablet'],
+                'packageUrl': f'https://{server_ip}/download/{app_data["filename"]}',
+                'packageHash': file_sha256(hap_path) if os.path.exists(hap_path) else '',
+            }]
+        }
+    }
+    
+    response = app.response_class(
+        response=json.dumps(manifest_data, indent=2, ensure_ascii=False),
+        status=200,
+        mimetype='application/json'
+    )
+    response.headers['Access-Control-Allow-Origin'] = '*'
     return response
 
 @app.route('/download/<filename>')
@@ -377,6 +572,7 @@ def api_apps_grouped():
                 'bundle_id': bid,
                 'name': app['name'],
                 'icon_filename': app['icon_filename'],
+                'platform': app['platform'],
                 'versions': {}
             }
         
@@ -452,11 +648,44 @@ def parse_ipa():
             os.unlink(tmp_path)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/parse-hap', methods=['POST'])
+def parse_hap():
+    """Parse HAP file metadata"""
+    if 'ipa_file' not in request.files:
+        return jsonify({'error': '没有文件'}), 400
+    
+    file = request.files['ipa_file']
+    if file.filename == '':
+        return jsonify({'error': '文件名为空'}), 400
+    
+    if not file.filename.lower().endswith('.hap'):
+        return jsonify({'error': '不是HAP文件'}), 400
+    
+    try:
+        import tempfile
+        
+        with tempfile.NamedTemporaryFile(suffix='.hap', delete=False) as tmp:
+            file.save(tmp.name)
+            tmp_path = tmp.name
+        
+        result = parse_hap_metadata(tmp_path)
+        os.unlink(tmp_path)
+        
+        if result:
+            return jsonify(result)
+        else:
+            return jsonify({'error': '无法解析HAP文件'}), 400
+    
+    except Exception as e:
+        if 'tmp_path' in locals() and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     import argparse
     import threading
 
-    parser = argparse.ArgumentParser(description='IPA分发服务')
+    parser = argparse.ArgumentParser(description='应用分发服务')
     parser.add_argument('--host', default='0.0.0.0', help='监听地址')
     parser.add_argument('--port', type=int, default=8443, help='HTTPS端口')
     parser.add_argument('--http-port', type=int, default=8080, help='HTTP端口（用于ngrok）')
@@ -472,7 +701,7 @@ if __name__ == '__main__':
     app.config['SERVER_IP'] = server_ip
 
     if args.ngrok:
-        print(f"IPA分发服务启动中（ngrok模式）...")
+        print(f"应用分发服务启动中（ngrok模式）...")
         print(f"HTTP地址: http://{args.host}:{args.http_port}")
         print(f"公网地址: https://{server_ip}")
         print(f"管理界面: https://{server_ip}/")
@@ -480,13 +709,13 @@ if __name__ == '__main__':
         print("")
         print("启动方式：")
         print(f"  1. 先启动本服务: python3 app.py --ngrok --server <ngrok地址>")
-        print(f"  2. 再启动ngrok:  ~/bin/ngrok http {args.http_port}")
+        print(f"  2. 再启动cloudflared: cloudflared tunnel --url http://localhost:{args.http_port}")
         app.run(host=args.host, port=args.http_port)
     else:
         cert_cn = server_ip.split(':')[0] if ':' in server_ip else server_ip
         cert_path, key_path = generate_certificates(cert_cn)
 
-        print(f"IPA分发服务启动中...")
+        print(f"应用分发服务启动中...")
         print(f"服务器地址: https://{server_ip}:{args.port}")
         print(f"管理界面: https://{server_ip}:{args.port}/")
         print(f"证书下载: https://{server_ip}:{args.port}/cert")

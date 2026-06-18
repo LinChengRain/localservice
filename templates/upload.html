@@ -6,7 +6,7 @@
 <div class="page-header">
     <div class="page-header-left">
         <h1>上传应用</h1>
-        <p class="subtitle">上传企业签名的 IPA 文件</p>
+        <p class="subtitle">上传企业签名的 IPA 或 HAP 文件</p>
     </div>
     <a href="{{ url_for('index') }}" class="btn btn-ghost">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -19,16 +19,16 @@
 <div class="upload-form">
     <form action="{{ url_for('upload') }}" method="POST" enctype="multipart/form-data" id="uploadForm">
         <div class="form-group">
-            <label for="ipa_file">IPA 文件 *</label>
+            <label for="ipa_file">安装包文件 *</label>
             <div class="file-input-wrapper">
-                <input type="file" id="ipa_file" name="ipa_file" accept=".ipa" required>
+                <input type="file" id="ipa_file" name="ipa_file" accept=".ipa,.hap" required>
                 <div class="file-input-hint" id="fileHint">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                         <polyline points="17 8 12 3 7 8"/>
                         <line x1="12" y1="3" x2="12" y2="15"/>
                     </svg>
-                    <span>点击选择或拖拽 IPA 文件</span>
+                    <span>点击选择或拖拽 IPA / HAP 文件</span>
                 </div>
             </div>
         </div>
@@ -91,7 +91,8 @@
     <h3>注意事项</h3>
     <ul>
         <li>IPA 必须使用企业证书签名</li>
-        <li>Bundle ID 需与 IPA 中一致</li>
+        <li>HAP 文件需确保已签名（企业分发证书）</li>
+        <li>Bundle ID 需与包内一致</li>
         <li>上传后自动生成安装链接</li>
     </ul>
 </div>
@@ -110,7 +111,11 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
     var formData = new FormData();
     formData.append('ipa_file', file);
 
-    fetch('/api/parse-ipa', { method: 'POST', body: formData })
+    var isHap = file.name.toLowerCase().endsWith('.hap');
+    var parseUrl = isHap ? '/api/parse-hap' : '/api/parse-ipa';
+
+    // Parse metadata from server
+    fetch(parseUrl, { method: 'POST', body: formData })
         .then(function(res) { return res.json(); })
         .then(function(result) {
             if (result.error) { alert('解析失败: ' + result.error); return; }
@@ -120,38 +125,79 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
         })
         .catch(function(err) { alert('解析失败: ' + err.message); });
 
+    // Extract icon from file using JSZip
     if (typeof JSZip !== 'undefined') {
         var reader = new FileReader();
         reader.onload = function(e) {
             JSZip.loadAsync(e.target.result).then(function(zip) {
                 var paths = Object.keys(zip.files);
                 var iconPath = null;
-                var iconPatterns = ['AppIcon60x60@2x.png', 'AppIcon60x60@3x.png', 'AppIcon-60@2x.png', 'AppIcon.png'];
 
-                for (var i = 0; i < iconPatterns.length; i++) {
-                    for (var j = 0; j < paths.length; j++) {
-                        if (paths[j].endsWith(iconPatterns[i])) { iconPath = paths[j]; break; }
-                    }
-                    if (iconPath) break;
-                }
-                if (!iconPath) {
+                if (isHap) {
+                    // HAP: parse module.json to get icon reference
                     for (var i = 0; i < paths.length; i++) {
-                        if (paths[i].includes('AppIcon') && paths[i].endsWith('.png') && !paths[i].includes('@')) { iconPath = paths[i]; break; }
+                        if (paths[i].endsWith('module.json') && !paths[i].includes('resources')) {
+                            return zip.file(paths[i]).async('string').then(function(jsonStr) {
+                                var moduleData = JSON.parse(jsonStr);
+                                var iconRef = (moduleData.app && moduleData.app.icon) || (moduleData.module && moduleData.module.icon) || '';
+                                
+                                if (iconRef.startsWith('$media:')) {
+                                    var mediaName = iconRef.replace('$media:', '');
+                                    for (var j = 0; j < paths.length; j++) {
+                                        if (paths[j].endsWith(mediaName + '.png') || paths[j].endsWith(mediaName + '.jpg')) {
+                                            iconPath = paths[j];
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                // Fallback: search for any icon in media directory
+                                if (!iconPath) {
+                                    for (var j = 0; j < paths.length; j++) {
+                                        if (paths[j].includes('media') && (paths[j].endsWith('.png') || paths[j].endsWith('.jpg'))) {
+                                            iconPath = paths[j];
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                if (iconPath) {
+                                    return zip.file(iconPath).async('base64').then(function(data) {
+                                        var dataUrl = 'data:image/png;base64,' + data;
+                                        document.getElementById('iconImg').src = dataUrl;
+                                        document.getElementById('iconPreview').style.display = 'flex';
+                                        document.getElementById('extracted_icon').value = dataUrl;
+                                    });
+                                }
+                            });
+                        }
+                    }
+                } else {
+                    // IPA: search for AppIcon patterns
+                    var iconPatterns = ['AppIcon60x60@2x.png', 'AppIcon60x60@3x.png', 'AppIcon-60@2x.png', 'AppIcon.png'];
+                    for (var i = 0; i < iconPatterns.length; i++) {
+                        for (var j = 0; j < paths.length; j++) {
+                            if (paths[j].endsWith(iconPatterns[i])) { iconPath = paths[j]; break; }
+                        }
+                        if (iconPath) break;
+                    }
+                    if (!iconPath) {
+                        for (var i = 0; i < paths.length; i++) {
+                            if (paths[i].includes('AppIcon') && paths[i].endsWith('.png') && !paths[i].includes('@')) { iconPath = paths[i]; break; }
+                        }
+                    }
+                    if (iconPath) {
+                        return zip.file(iconPath).async('base64').then(function(data) {
+                            var dataUrl = 'data:image/png;base64,' + data;
+                            document.getElementById('iconImg').src = dataUrl;
+                            document.getElementById('iconPreview').style.display = 'flex';
+                            document.getElementById('extracted_icon').value = dataUrl;
+                        });
                     }
                 }
-                if (iconPath) {
-                    zip.file(iconPath).async('base64').then(function(data) {
-                        var dataUrl = 'data:image/png;base64,' + data;
-                        document.getElementById('iconImg').src = dataUrl;
-                        document.getElementById('iconPreview').style.display = 'flex';
-                        document.getElementById('extracted_icon').value = dataUrl;
-                        document.getElementById('loadingIndicator').style.display = 'none';
-                        document.getElementById('submitBtn').disabled = false;
-                    });
-                } else {
-                    document.getElementById('loadingIndicator').style.display = 'none';
-                    document.getElementById('submitBtn').disabled = false;
-                }
+            }).then(function() {
+                document.getElementById('loadingIndicator').style.display = 'none';
+                document.getElementById('submitBtn').disabled = false;
             }).catch(function() {
                 document.getElementById('loadingIndicator').style.display = 'none';
                 document.getElementById('submitBtn').disabled = false;

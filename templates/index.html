@@ -5,8 +5,16 @@
 {% block content %}
 <div class="page-header">
     <div class="page-header-left">
+        {% if client_platform == 'ios' %}
+        <h1>iOS 应用</h1>
+        <p class="subtitle">iOS 企业应用分发</p>
+        {% elif client_platform == 'harmonyos' %}
+        <h1>鸿蒙应用</h1>
+        <p class="subtitle">鸿蒙企业应用分发</p>
+        {% else %}
         <h1>应用分发</h1>
         <p class="subtitle">企业内部应用分发平台</p>
+        {% endif %}
     </div>
     {% if is_lan %}
     <a href="{{ url_for('upload') }}" class="btn btn-primary">
@@ -17,6 +25,14 @@
     </a>
     {% endif %}
 </div>
+
+{% if client_platform == 'all' %}
+<div class="platform-filter">
+    <a href="{{ url_for('index') }}" class="platform-filter-btn {% if not request.args.get('platform') %}active{% endif %}">全部</a>
+    <a href="{{ url_for('index', platform='ios') }}" class="platform-filter-btn {% if request.args.get('platform') == 'ios' %}active{% endif %}">iOS</a>
+    <a href="{{ url_for('index', platform='harmonyos') }}" class="platform-filter-btn {% if request.args.get('platform') == 'harmonyos' %}active{% endif %}">鸿蒙</a>
+</div>
+{% endif %}
 
 {% if grouped_apps %}
 <div class="apps-grouped">
@@ -37,7 +53,14 @@
             </div>
             <div class="app-group-info">
                 <h2 class="app-group-name">{{ group.name }}</h2>
-                <span class="app-group-bundle">{{ group.bundle_id }}</span>
+                <div class="app-group-meta">
+                    <span class="app-group-bundle">{{ group.bundle_id }}</span>
+                    {% if group.platform == 'harmonyos' %}
+                    <span class="platform-tag platform-harmonyos">鸿蒙</span>
+                    {% else %}
+                    <span class="platform-tag platform-ios">iOS</span>
+                    {% endif %}
+                </div>
             </div>
         </div>
 
@@ -46,8 +69,6 @@
             <div class="version-section">
                 <div class="version-header" onclick="toggleVersion(this)">
                     <span class="version-tag">v{{ version }}</span>
-                    <!-- {% set type_names = {'release': '正式版', 'staging': '准生产', 'testing': '测试版', 'debug': '调试版'} %} -->
-                    <!-- <span class="build-type-tag">{{ type_names.get(builds[0].build_type, builds[0].build_type) }}</span> -->
                     <span class="build-count">{{ builds|length }} 个构建</span>
                     <svg class="version-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="6 9 12 15 18 9"/>
@@ -106,9 +127,19 @@
             <line x1="12" y1="18" x2="12" y2="18.01" stroke-width="2" stroke-linecap="round"/>
         </svg>
     </div>
+    {% if client_platform == 'ios' %}
+    <h3>暂无 iOS 应用</h3>
+    <p>上传第一个 iOS 企业应用开始分发</p>
+    {% elif client_platform == 'harmonyos' %}
+    <h3>暂无鸿蒙应用</h3>
+    <p>上传第一个鸿蒙企业应用开始分发</p>
+    {% else %}
     <h3>暂无应用</h3>
     <p>上传第一个企业应用开始分发</p>
+    {% endif %}
+    {% if is_lan %}
     <a href="{{ url_for('upload') }}" class="btn btn-primary">上传应用</a>
+    {% endif %}
 </div>
 {% endif %}
 

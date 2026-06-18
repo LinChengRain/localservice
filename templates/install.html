@@ -31,11 +31,37 @@
                     <span class="meta-tag">v{{ app.version }}</span>
                     {% set type_names = {'release': '正式版', 'staging': '准生产', 'testing': '测试版', 'debug': '调试版'} %}
                     <span class="meta-tag build-type-{{ app.build_type }}">{{ type_names.get(app.build_type, app.build_type) }}</span>
-                    <!-- <span class="meta-text">{{ app.bundle_id }}</span> -->
+                    {% if app.platform == 'harmonyos' %}
+                    <span class="platform-tag platform-harmonyos">鸿蒙</span>
+                    {% else %}
+                    <span class="platform-tag platform-ios">iOS</span>
+                    {% endif %}
                 </div>
             </div>
         </div>
 
+        {% if app.platform == 'harmonyos' %}
+        <div class="install-actions">
+            {% set harmony_manifest_url = "https://" ~ server_ip ~ "/manifest-harmony/" ~ app.id %}
+            {% set deeplink = "store://enterprise/manifest?url=" ~ harmony_manifest_url %}
+            <a href="{{ deeplink }}" class="btn-install-main">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                安装此应用
+            </a>
+            <p class="install-hint">使用鸿蒙系统浏览器打开</p>
+        </div>
+
+        <div class="install-section qr-section">
+            <div class="qr-wrapper">
+                <div id="qrcode"></div>
+            </div>
+            <p class="qr-desc">鸿蒙设备扫码即可安装</p>
+        </div>
+        {% else %}
         <div class="install-actions">
             {% set manifest_url = "https://" ~ server_ip ~ "/manifest/" ~ app.id %}
             <a href="itms-services://?action=download-manifest&url={{ manifest_url | urlencode }}" class="btn-install-main">
@@ -55,6 +81,7 @@
             </div>
             <p class="qr-desc">iPhone 相机扫码即可安装</p>
         </div>
+        {% endif %}
     </div>
 
     <div class="install-info">
@@ -76,6 +103,51 @@
         </div>
     </div>
 
+    {% if app.platform == 'harmonyos' %}
+    <div class="install-section">
+        <h3 class="section-title">安装链接</h3>
+        <p class="section-desc">如一键安装不工作，复制下方链接到鸿蒙系统浏览器地址栏：</p>
+        {% set harmony_manifest_url = "https://" ~ server_ip ~ "/manifest-harmony/" ~ app.id %}
+        {% set deeplink = "store://enterprise/manifest?url=" ~ harmony_manifest_url %}
+        <div class="code-copy">
+            <code id="manifest-url">{{ deeplink }}</code>
+            <button class="btn-copy" onclick="copyUrl()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                <span>复制</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="install-section">
+        <h3 class="section-title">安装说明</h3>
+        <div class="cert-list">
+            <div class="cert-item">
+                <span class="cert-num">1</span>
+                <div class="cert-content">
+                    <span class="cert-title">打开链接</span>
+                    <span class="cert-desc">在鸿蒙系统浏览器中打开上方安装链接</span>
+                </div>
+            </div>
+            <div class="cert-item">
+                <span class="cert-num">2</span>
+                <div class="cert-content">
+                    <span class="cert-title">确认安装</span>
+                    <span class="cert-desc">系统会弹出安装确认，点击允许</span>
+                </div>
+            </div>
+            <div class="cert-item">
+                <span class="cert-num">3</span>
+                <div class="cert-content">
+                    <span class="cert-title">信任应用</span>
+                    <span class="cert-desc">设置 → 安全 → 信任企业开发者</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
     <div class="install-section">
         <h3 class="section-title">安装链接</h3>
         <p class="section-desc">如一键安装不工作，复制下方链接到 Safari 地址栏：</p>
@@ -119,11 +191,18 @@
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
-    var installUrl = "itms-services://?action=download-manifest&url={{ manifest_url | urlencode }}";
+    {% if app.platform == 'harmonyos' %}
+    var harmony_manifest_url = "https://{{ server_ip }}/manifest-harmony/{{ app.id }}";
+    var installUrl = "store://enterprise/manifest?url=" + encodeURIComponent(harmony_manifest_url);
+    {% else %}
+    var installUrl = "itms-services://?action=download-manifest&url={{ ('https://' ~ server_ip ~ '/manifest/' ~ app.id) | urlencode }}";
+    {% endif %}
+    
     new QRCode(document.getElementById("qrcode"), {
         text: installUrl,
         width: 140,
