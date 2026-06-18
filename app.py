@@ -32,9 +32,17 @@ def init_db():
             filename TEXT NOT NULL,
             upload_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             icon_filename TEXT,
-            description TEXT
+            description TEXT,
+            build_number TEXT DEFAULT '',
+            build_type TEXT DEFAULT 'release'
         )
     ''')
+    # Add columns if missing (migration for existing DB)
+    for col, default in [("build_number", "''"), ("build_type", "'release'")]:
+        try:
+            db.execute(f"ALTER TABLE apps ADD COLUMN {col} TEXT DEFAULT {default}")
+        except:
+            pass
     db.commit()
     db.close()
 
@@ -150,9 +158,28 @@ def inject_globals():
 def index():
     db = get_db()
     apps = db.execute('SELECT * FROM apps ORDER BY upload_time DESC').fetchall()
+    
+    # Group apps by bundle_id
+    grouped = {}
+    for app in apps:
+        bid = app['bundle_id']
+        if bid not in grouped:
+            grouped[bid] = {
+                'bundle_id': bid,
+                'name': app['name'],
+                'icon_filename': app['icon_filename'],
+                'versions': {}
+            }
+        
+        ver = app['version']
+        if ver not in grouped[bid]['versions']:
+            grouped[bid]['versions'][ver] = []
+        
+        grouped[bid]['versions'][ver].append(dict(app))
+    
     db.close()
     server_ip = get_server_ip()
-    return render_template('index.html', apps=apps, server_ip=server_ip)
+    return render_template('index.html', apps=apps, grouped_apps=grouped.values(), server_ip=server_ip)
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload():
@@ -175,7 +202,23 @@ def upload():
             name = request.form.get('name', '')
             bundle_id = request.form.get('bundle_id', '')
             version = request.form.get('version', '1.0')
+            build_type = request.form.get('build_type', 'testing')
             description = request.form.get('description', '')
+
+            # Auto-increment build_number for same bundle_id + version
+            db = get_db()
+            existing = db.execute(
+                'SELECT build_number FROM apps WHERE bundle_id = ? AND version = ? ORDER BY CAST(build_number AS INTEGER) DESC LIMIT 1',
+                (bundle_id, version)
+            ).fetchone()
+            if existing and existing['build_number']:
+                try:
+                    build_number = str(int(existing['build_number']) + 1)
+                except ValueError:
+                    build_number = '1'
+            else:
+                build_number = '1'
+            db.close()
             
             icon_filename = None
             if 'icon_file' in request.files:
@@ -205,8 +248,8 @@ def upload():
             
             db = get_db()
             db.execute(
-                'INSERT INTO apps (name, bundle_id, version, filename, icon_filename, description) VALUES (?, ?, ?, ?, ?, ?)',
-                (name, bundle_id, version, filename, icon_filename, description)
+                'INSERT INTO apps (name, bundle_id, version, filename, icon_filename, description, build_number, build_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                (name, bundle_id, version, filename, icon_filename, description, build_number, build_type)
             )
             db.commit()
             db.close()
@@ -317,6 +360,34 @@ def api_apps():
     db.close()
     return jsonify([dict(app) for app in apps])
 
+@app.route('/api/apps/grouped')
+def api_apps_grouped():
+    db = get_db()
+    apps = db.execute('''
+        SELECT * FROM apps 
+        ORDER BY bundle_id, version DESC, upload_time DESC
+    ''').fetchall()
+    db.close()
+    
+    grouped = {}
+    for app in apps:
+        bid = app['bundle_id']
+        if bid not in grouped:
+            grouped[bid] = {
+                'bundle_id': bid,
+                'name': app['name'],
+                'icon_filename': app['icon_filename'],
+                'versions': {}
+            }
+        
+        ver = app['version']
+        if ver not in grouped[bid]['versions']:
+            grouped[bid]['versions'][ver] = []
+        
+        grouped[bid]['versions'][ver].append(dict(app))
+    
+    return jsonify(list(grouped.values()))
+
 @app.route('/api/parse-ipa', methods=['POST'])
 def parse_ipa():
     if 'ipa_file' not in request.files:
@@ -371,6 +442,7 @@ def parse_ipa():
                 result['name'] = plist.get('CFBundleDisplayName', '') or plist.get('CFBundleName', '')
                 result['bundle_id'] = plist.get('CFBundleIdentifier', '')
                 result['version'] = plist.get('CFBundleShortVersionString', '') or plist.get('CFBundleVersion', '')
+                result['build_number'] = plist.get('CFBundleVersion', '')
         
         os.unlink(tmp_path)
         return jsonify(result)

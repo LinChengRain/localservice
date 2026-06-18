@@ -29,7 +29,9 @@
                 <h1>{{ app.name }}</h1>
                 <div class="app-meta-row">
                     <span class="meta-tag">v{{ app.version }}</span>
-                    <span class="meta-text">{{ app.bundle_id }}</span>
+                    {% set type_names = {'release': '正式版', 'staging': '准生产', 'testing': '测试版', 'debug': '调试版'} %}
+                    <span class="meta-tag build-type-{{ app.build_type }}">{{ type_names.get(app.build_type, app.build_type) }}</span>
+                    <!-- <span class="meta-text">{{ app.bundle_id }}</span> -->
                 </div>
             </div>
         </div>
@@ -59,6 +61,10 @@
         <div class="info-row">
             <div class="info-label">版本</div>
             <div class="info-value">{{ app.version }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">构建号</div>
+            <div class="info-value">#{{ app.build_number }}</div>
         </div>
         <div class="info-row">
             <div class="info-label">Bundle ID</div>

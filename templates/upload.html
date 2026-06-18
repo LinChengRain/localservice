@@ -59,15 +59,25 @@
         </div>
 
         <div class="form-group">
+            <label for="build_type">包类型</label>
+            <select id="build_type" name="build_type">
+                <option value="testing" selected>测试版</option>
+                <option value="staging">准生产</option>
+                <option value="release">正式版</option>
+                <option value="debug">调试版</option>
+            </select>
+        </div>
+
+        <div class="form-group">
             <label for="description">描述</label>
             <textarea id="description" name="description" rows="2" placeholder="可选：应用简介"></textarea>
         </div>
-
+<!-- 
         <div class="form-group">
             <label for="icon_file">应用图标</label>
             <input type="file" id="icon_file" name="icon_file" accept=".png,.jpg,.jpeg">
             <p class="help-text">已从 IPA 自动提取，也可手动覆盖</p>
-        </div>
+        </div> -->
 
         <input type="hidden" id="extracted_icon" name="extracted_icon" value="">
 
@@ -97,99 +107,61 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
     document.getElementById('submitBtn').disabled = true;
     document.getElementById('iconPreview').style.display = 'none';
 
-    var reader = new FileReader();
-    reader.onload = function(e) {
-        JSZip.loadAsync(e.target.result).then(function(zip) {
-            var paths = Object.keys(zip.files);
-            var plistPath = null;
-            var iconPath = null;
+    var formData = new FormData();
+    formData.append('ipa_file', file);
 
-            var iconPatterns = ['AppIcon60x60@2x.png', 'AppIcon60x60@3x.png', 'AppIcon-60@2x.png', 'AppIcon.png'];
+    fetch('/api/parse-ipa', { method: 'POST', body: formData })
+        .then(function(res) { return res.json(); })
+        .then(function(result) {
+            if (result.error) { alert('解析失败: ' + result.error); return; }
+            document.getElementById('name').value = result.name || '';
+            document.getElementById('bundle_id').value = result.bundle_id || '';
+            document.getElementById('version').value = result.version || '';
+        })
+        .catch(function(err) { alert('解析失败: ' + err.message); });
 
-            for (var i = 0; i < paths.length; i++) {
-                if (paths[i].match(/Payload\/[^/]+\.app\/Info\.plist$/)) {
-                    plistPath = paths[i];
-                    break;
+    if (typeof JSZip !== 'undefined') {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            JSZip.loadAsync(e.target.result).then(function(zip) {
+                var paths = Object.keys(zip.files);
+                var iconPath = null;
+                var iconPatterns = ['AppIcon60x60@2x.png', 'AppIcon60x60@3x.png', 'AppIcon-60@2x.png', 'AppIcon.png'];
+
+                for (var i = 0; i < iconPatterns.length; i++) {
+                    for (var j = 0; j < paths.length; j++) {
+                        if (paths[j].endsWith(iconPatterns[i])) { iconPath = paths[j]; break; }
+                    }
+                    if (iconPath) break;
                 }
-            }
-
-            for (var i = 0; i < iconPatterns.length; i++) {
-                for (var j = 0; j < paths.length; j++) {
-                    if (paths[j].endsWith(iconPatterns[i])) {
-                        iconPath = paths[j];
-                        break;
+                if (!iconPath) {
+                    for (var i = 0; i < paths.length; i++) {
+                        if (paths[i].includes('AppIcon') && paths[i].endsWith('.png') && !paths[i].includes('@')) { iconPath = paths[i]; break; }
                     }
                 }
-                if (iconPath) break;
-            }
-
-            if (!iconPath) {
-                for (var i = 0; i < paths.length; i++) {
-                    if (paths[i].includes('AppIcon') && paths[i].endsWith('.png') && !paths[i].includes('@')) {
-                        iconPath = paths[i];
-                        break;
-                    }
+                if (iconPath) {
+                    zip.file(iconPath).async('base64').then(function(data) {
+                        var dataUrl = 'data:image/png;base64,' + data;
+                        document.getElementById('iconImg').src = dataUrl;
+                        document.getElementById('iconPreview').style.display = 'flex';
+                        document.getElementById('extracted_icon').value = dataUrl;
+                        document.getElementById('loadingIndicator').style.display = 'none';
+                        document.getElementById('submitBtn').disabled = false;
+                    });
+                } else {
+                    document.getElementById('loadingIndicator').style.display = 'none';
+                    document.getElementById('submitBtn').disabled = false;
                 }
-            }
-
-            var promises = [];
-
-            if (plistPath) {
-                promises.push(zip.file(plistPath).async('string').then(function(xml) {
-                    var parser = new DOMParser();
-                    var doc = parser.parseFromString(xml, 'text/xml');
-                    var dicts = doc.querySelectorAll('dict');
-                    var mainDict = null;
-
-                    for (var i = 0; i < dicts.length; i++) {
-                        var keys = dicts[i].querySelectorAll('key');
-                        for (var j = 0; j < keys.length; j++) {
-                            if (keys[j].textContent === 'CFBundleIdentifier') {
-                                mainDict = dicts[i];
-                                break;
-                            }
-                        }
-                        if (mainDict) break;
-                    }
-
-                    if (mainDict) {
-                        function getValue(keyName) {
-                            var keys = mainDict.querySelectorAll('key');
-                            for (var i = 0; i < keys.length; i++) {
-                                if (keys[i].textContent === keyName) {
-                                    var next = keys[i].nextElementSibling;
-                                    if (next && next.tagName === 'string') return next.textContent;
-                                }
-                            }
-                            return '';
-                        }
-
-                        document.getElementById('name').value = getValue('CFBundleDisplayName') || getValue('CFBundleName') || '';
-                        document.getElementById('bundle_id').value = getValue('CFBundleIdentifier') || '';
-                        document.getElementById('version').value = getValue('CFBundleShortVersionString') || getValue('CFBundleVersion') || '';
-                    }
-                }));
-            }
-
-            if (iconPath) {
-                promises.push(zip.file(iconPath).async('base64').then(function(data) {
-                    var dataUrl = 'data:image/png;base64,' + data;
-                    document.getElementById('iconImg').src = dataUrl;
-                    document.getElementById('iconPreview').style.display = 'flex';
-                    document.getElementById('extracted_icon').value = dataUrl;
-                }));
-            }
-
-            return Promise.all(promises);
-        }).then(function() {
-            document.getElementById('loadingIndicator').style.display = 'none';
-            document.getElementById('submitBtn').disabled = false;
-        }).catch(function(err) {
-            document.getElementById('loadingIndicator').style.display = 'none';
-            alert('解析失败: ' + err.message);
-        });
-    };
-    reader.readAsArrayBuffer(file);
+            }).catch(function() {
+                document.getElementById('loadingIndicator').style.display = 'none';
+                document.getElementById('submitBtn').disabled = false;
+            });
+        };
+        reader.readAsArrayBuffer(file);
+    } else {
+        document.getElementById('loadingIndicator').style.display = 'none';
+        document.getElementById('submitBtn').disabled = false;
+    }
 });
 </script>
 

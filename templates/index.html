@@ -18,16 +18,16 @@
     {% endif %}
 </div>
 
-{% if apps %}
-<div class="apps-list">
-    {% for app in apps %}
-    <div class="app-card">
-        <a href="{{ url_for('install', app_id=app.id) }}" class="app-card-main">
-            <div class="app-card-icon">
-                {% if app.icon_filename %}
-                <img src="{{ url_for('download', filename=app.icon_filename) }}" alt="{{ app.name }}">
+{% if grouped_apps %}
+<div class="apps-grouped">
+    {% for group in grouped_apps %}
+    <div class="app-group">
+        <div class="app-group-header">
+            <div class="app-group-icon">
+                {% if group.icon_filename %}
+                <img src="{{ url_for('download', filename=group.icon_filename) }}" alt="{{ group.name }}">
                 {% else %}
-                <div class="app-card-icon-default">
+                <div class="app-icon-placeholder">
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5">
                         <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
                         <line x1="12" y1="18" x2="12" y2="18.01" stroke-width="2" stroke-linecap="round"/>
@@ -35,31 +35,65 @@
                 </div>
                 {% endif %}
             </div>
-            <div class="app-card-content">
-                <div class="app-card-top">
-                    <h3 class="app-card-name">{{ app.name }}</h3>
-                    <span class="app-card-version">v{{ app.version }}</span>
-                </div>
-                <div class="app-card-meta">{{ app.bundle_id }}</div>
-                <div class="app-card-time">{{ app.upload_time }}</div>
+            <div class="app-group-info">
+                <h2 class="app-group-name">{{ group.name }}</h2>
+                <span class="app-group-bundle">{{ group.bundle_id }}</span>
             </div>
-            <svg class="app-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="9 18 15 12 9 6"/>
-            </svg>
-        </a>
-        {% if is_lan %}
-        <div class="app-card-actions">
-            <form action="{{ url_for('delete', app_id=app.id) }}" method="POST">
-                <button type="submit" class="btn-delete-sm" onclick="return confirm('确定删除 {{ app.name }}？')">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"/>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                    </svg>
-                    删除
-                </button>
-            </form>
         </div>
-        {% endif %}
+
+        <div class="app-group-versions">
+            {% for version, builds in group.versions.items() %}
+            <div class="version-section">
+                <div class="version-header" onclick="toggleVersion(this)">
+                    <span class="version-tag">v{{ version }}</span>
+                    <!-- {% set type_names = {'release': '正式版', 'staging': '准生产', 'testing': '测试版', 'debug': '调试版'} %} -->
+                    <!-- <span class="build-type-tag">{{ type_names.get(builds[0].build_type, builds[0].build_type) }}</span> -->
+                    <span class="build-count">{{ builds|length }} 个构建</span>
+                    <svg class="version-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                
+                <div class="version-builds">
+                    {% for build in builds %}
+                    <div class="build-item">
+                        <div class="build-info">
+                            <div class="build-meta-row">
+                                <span class="build-number">构建 #{{ build.build_number }}</span>
+                                {% set type_names = {'release': '正式版', 'staging': '准生产', 'testing': '测试版', 'debug': '调试版'} %}
+                                <span class="build-type-badge build-type-{{ build.build_type }}">{{ type_names.get(build.build_type, build.build_type) }}</span>
+                            </div>
+                            <span class="build-time">{{ build.upload_time }}</span>
+                            {% if build.description %}
+                            <span class="build-desc">{{ build.description }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="build-actions">
+                            <a href="{{ url_for('install', app_id=build.id) }}" class="btn-install-sm">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="7 10 12 15 17 10"/>
+                                    <line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
+                                安装
+                            </a>
+                            {% if is_lan %}
+                            <form action="{{ url_for('delete', app_id=build.id) }}" method="POST" class="delete-form">
+                                <button type="submit" class="btn-delete-icon" onclick="return confirm('确定删除此构建？')">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3 6 5 6 21 6"/>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                    </svg>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
     </div>
     {% endfor %}
 </div>
@@ -77,4 +111,19 @@
     <a href="{{ url_for('upload') }}" class="btn btn-primary">上传应用</a>
 </div>
 {% endif %}
+
+<script>
+function toggleVersion(header) {
+    var builds = header.nextElementSibling;
+    var chevron = header.querySelector('.version-chevron');
+    
+    if (builds.style.display === 'none' || builds.style.display === '') {
+        builds.style.display = 'block';
+        chevron.style.transform = 'rotate(180deg)';
+    } else {
+        builds.style.display = 'none';
+        chevron.style.transform = 'rotate(0deg)';
+    }
+}
+</script>
 {% endblock %}
