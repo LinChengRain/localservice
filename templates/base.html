@@ -7,13 +7,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
-    <title>{% block title %}IPA分发{% endblock %}</title>
+    <title>{% block title %}应用分发{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-brand">
-            <a href="{{ url_for('index') }}">IPA分发</a>
+            <a href="{{ url_for('index') }}">应用分发</a>
         </div>
         <div class="nav-links">
             <a href="{{ url_for('index') }}">应用</a>
