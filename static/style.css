@@ -596,6 +596,11 @@ body {
     color: #ff6600;
 }
 
+.platform-android {
+    background: rgba(61,220,132,0.15);
+    color: #3ddc84;
+}
+
 .app-group-meta {
     display: flex;
     align-items: center;

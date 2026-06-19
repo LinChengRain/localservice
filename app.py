@@ -15,7 +15,7 @@ app.config['CERT_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file_
 app.config['DATABASE'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'apps.db')
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max
 
-ALLOWED_EXTENSIONS = {'ipa', 'hap', 'png', 'jpg', 'jpeg'}
+ALLOWED_EXTENSIONS = {'ipa', 'hap', 'apk', 'png', 'jpg', 'jpeg'}
 
 def get_db():
     db = sqlite3.connect(app.config['DATABASE'])
@@ -45,6 +45,9 @@ def init_db():
             db.execute(f"ALTER TABLE apps ADD COLUMN {col} TEXT DEFAULT {default}")
         except:
             pass
+    # Add index for faster queries
+    db.execute('CREATE INDEX IF NOT EXISTS idx_apps_platform ON apps(platform)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_apps_bundle_id ON apps(bundle_id)')
     db.commit()
     db.close()
 
@@ -56,53 +59,71 @@ def extract_icon_from_ipa(ipa_path, output_dir, timestamp):
         import zipfile
         
         with zipfile.ZipFile(ipa_path, 'r') as zip_ref:
-            # Look for common app icon patterns
-            icon_patterns = [
+            namelist = zip_ref.namelist()
+            
+            icon_patterns = (
                 'AppIcon60x60@2x.png',
                 'AppIcon60x60@3x.png',
                 'AppIcon76x76@2x~ipad.png',
                 'AppIcon-60@2x.png',
                 'AppIcon.png',
                 'icon.png'
-            ]
+            )
             
-            # First try specific patterns
+            # Single pass: categorize all icon candidates
+            pattern_matches = {p: [] for p in icon_patterns}
+            fallback_matches = []
+            
+            for name in namelist:
+                if name.endswith('.png'):
+                    matched = False
+                    for pattern in icon_patterns:
+                        if name.endswith(pattern):
+                            pattern_matches[pattern].append(name)
+                            matched = True
+                            break
+                    if not matched and 'AppIcon' in name:
+                        fallback_matches.append(name)
+            
+            # Priority: specific patterns first
             for pattern in icon_patterns:
-                for name in zip_ref.namelist():
-                    if name.endswith(pattern):
-                        icon_data = zip_ref.read(name)
+                if pattern_matches[pattern]:
+                    icon_data = zip_ref.read(pattern_matches[pattern][0])
+                    icon_filename = f"{timestamp}icon.png"
+                    with open(os.path.join(output_dir, icon_filename), 'wb') as f:
+                        f.write(icon_data)
+                    return icon_filename
+            
+            # Fallback: any AppIcon file
+            for name in fallback_matches:
+                try:
+                    icon_data = zip_ref.read(name)
+                    if len(icon_data) > 1000:
                         icon_filename = f"{timestamp}icon.png"
-                        icon_path = os.path.join(output_dir, icon_filename)
-                        with open(icon_path, 'wb') as f:
+                        with open(os.path.join(output_dir, icon_filename), 'wb') as f:
                             f.write(icon_data)
                         return icon_filename
-            
-            # Fallback: search for any AppIcon file
-            for name in zip_ref.namelist():
-                if 'AppIcon' in name and name.endswith('.png'):
-                    try:
-                        icon_data = zip_ref.read(name)
-                        if len(icon_data) > 1000:  # Skip tiny files
-                            icon_filename = f"{timestamp}icon.png"
-                            icon_path = os.path.join(output_dir, icon_filename)
-                            with open(icon_path, 'wb') as f:
-                                f.write(icon_data)
-                            return icon_filename
-                    except:
-                        continue
+                except:
+                    continue
         
         return None
     except Exception as e:
         print(f"Error extracting icon: {e}")
         return None
 
+_sha256_cache = {}
+
 def file_sha256(filepath):
-    """Calculate SHA256 hash of a file"""
+    """Calculate SHA256 hash of a file with caching"""
+    if filepath in _sha256_cache:
+        return _sha256_cache[filepath]
     sha256 = hashlib.sha256()
     with open(filepath, 'rb') as f:
         for chunk in iter(lambda: f.read(8192), b''):
             sha256.update(chunk)
-    return sha256.hexdigest()
+    result = sha256.hexdigest()
+    _sha256_cache[filepath] = result
+    return result
 
 def extract_icon_from_hap(hap_path, output_dir, timestamp):
     """Extract app icon from HAP file"""
@@ -165,24 +186,117 @@ def extract_icon_from_hap(hap_path, output_dir, timestamp):
         print(f"Error extracting HAP icon: {e}")
     return None
 
+def extract_icon_from_apk(apk_path, output_dir, timestamp):
+    """Extract app icon from APK file"""
+    try:
+        import zipfile
+
+        # First try: get icon path from AndroidManifest via androguard
+        try:
+            from androguard.core.apk import APK
+            a = APK(apk_path)
+            manifest_icon = a.get_app_icon()
+            if manifest_icon:
+                with zipfile.ZipFile(apk_path, 'r') as z:
+                    if manifest_icon in z.namelist():
+                        icon_data = z.read(manifest_icon)
+                        if len(icon_data) > 500:
+                            icon_filename = f"{timestamp}icon.png"
+                            with open(os.path.join(output_dir, icon_filename), 'wb') as f:
+                                f.write(icon_data)
+                            return icon_filename
+        except Exception:
+            pass
+
+        # Fallback: search by standard paths
+        with zipfile.ZipFile(apk_path, 'r') as z:
+            namelist = z.namelist()
+
+            densities = ['xxxhdpi', 'xxhdpi', 'xhdpi', 'hdpi', 'mdpi']
+            icon_names = ('ic_launcher.png', 'icon.png', 'app_icon.png')
+
+            mipmap_matches = {}
+            drawable_matches = []
+            fallback_matches = []
+
+            for name in namelist:
+                if name.endswith('.png') and 'icon' in name.lower():
+                    for density in densities:
+                        if f'mipmap-{density}' in name:
+                            for icon_name in icon_names:
+                                if name.endswith(icon_name):
+                                    mipmap_matches.setdefault(density, []).append(name)
+                            break
+                        elif f'drawable-{density}' in name:
+                            drawable_matches.append(name)
+                            break
+                    else:
+                        fallback_matches.append(name)
+
+            for density in densities:
+                if density in mipmap_matches:
+                    icon_data = z.read(mipmap_matches[density][0])
+                    if len(icon_data) > 1000:
+                        icon_filename = f"{timestamp}icon.png"
+                        with open(os.path.join(output_dir, icon_filename), 'wb') as f:
+                            f.write(icon_data)
+                        return icon_filename
+
+            for name in drawable_matches:
+                icon_data = z.read(name)
+                if len(icon_data) > 1000:
+                    icon_filename = f"{timestamp}icon.png"
+                    with open(os.path.join(output_dir, icon_filename), 'wb') as f:
+                        f.write(icon_data)
+                    return icon_filename
+
+            for name in fallback_matches:
+                try:
+                    icon_data = z.read(name)
+                    if len(icon_data) > 1000:
+                        icon_filename = f"{timestamp}icon.png"
+                        with open(os.path.join(output_dir, icon_filename), 'wb') as f:
+                            f.write(icon_data)
+                        return icon_filename
+                except Exception:
+                    continue
+
+    except Exception as e:
+        print(f"Error extracting APK icon: {e}")
+    return None
+
+def parse_apk_metadata(apk_path):
+    """Parse APK metadata from AndroidManifest.xml"""
+    try:
+        from androguard.core.apk import APK
+
+        a = APK(apk_path)
+        return {
+            'name': a.get_app_name() or '',
+            'bundle_id': a.get_package() or '',
+            'version': a.get_androidversion_name() or '',
+            'build_number': str(a.get_androidversion_code() or ''),
+        }
+    except Exception as e:
+        print(f"Error parsing APK metadata: {e}")
+    return None
+
 def parse_hap_metadata(hap_path):
     """Parse module.json and pack.info from HAP file to get metadata"""
     try:
         import zipfile
         
         with zipfile.ZipFile(hap_path, 'r') as z:
-            # Read pack.info for versionCode (more reliable source)
             pack_info = None
+            module_data = None
+            
+            # Single pass to find both files
             for name in z.namelist():
                 if name == 'pack.info':
                     pack_info = json.loads(z.read(name))
-                    break
-            
-            # Read module.json for other metadata
-            module_data = None
-            for name in z.namelist():
-                if name == 'module.json':
+                elif name == 'module.json':
                     module_data = json.loads(z.read(name))
+                if pack_info and module_data:
                     break
             
             if not module_data:
@@ -247,33 +361,27 @@ def generate_certificates(cn):
     subprocess.run(cmd, check=True)
     return cert_path, key_path
 
+_cached_lan_ip = None
+
 def get_server_ip():
-    # 优先使用配置中的服务器地址
     if 'SERVER_IP' in app.config:
         return app.config['SERVER_IP']
-    
-    import socket
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(('8.8.8.8', 80))
-        ip = s.getsockname()[0]
-    except:
-        ip = '127.0.0.1'
-    finally:
-        s.close()
-    return ip
+    return get_lan_ip()
 
 def get_lan_ip():
+    global _cached_lan_ip
+    if _cached_lan_ip:
+        return _cached_lan_ip
     import socket
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(('8.8.8.8', 80))
-        ip = s.getsockname()[0]
+        _cached_lan_ip = s.getsockname()[0]
     except:
-        ip = '127.0.0.1'
+        _cached_lan_ip = '127.0.0.1'
     finally:
         s.close()
-    return ip
+    return _cached_lan_ip
 
 def detect_platform():
     """Detect device platform from User-Agent"""
@@ -282,6 +390,8 @@ def detect_platform():
         return 'ios'
     elif 'harmony' in ua or 'hmos' in ua:
         return 'harmonyos'
+    elif 'android' in ua:
+        return 'android'
     return 'all'
 
 @app.context_processor
@@ -313,7 +423,7 @@ def index():
     # Filter by platform if on mobile, or if filter is specified
     if platform != 'all':
         apps = db.execute('SELECT * FROM apps WHERE platform = ? ORDER BY upload_time DESC', (platform,)).fetchall()
-    elif filter_platform and filter_platform in ('ios', 'harmonyos'):
+    elif filter_platform and filter_platform in ('ios', 'harmonyos', 'android'):
         apps = db.execute('SELECT * FROM apps WHERE platform = ? ORDER BY upload_time DESC', (filter_platform,)).fetchall()
     else:
         apps = db.execute('SELECT * FROM apps ORDER BY upload_time DESC').fetchall()
@@ -360,7 +470,12 @@ def upload():
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
             
             # Detect platform from file extension
-            platform = 'harmonyos' if filename.lower().endswith('.hap') else 'ios'
+            if filename.lower().endswith('.hap'):
+                platform = 'harmonyos'
+            elif filename.lower().endswith('.apk'):
+                platform = 'android'
+            else:
+                platform = 'ios'
             
             name = request.form.get('name', '')
             bundle_id = request.form.get('bundle_id', '')
@@ -371,12 +486,29 @@ def upload():
             # Auto-increment build_number for same bundle_id + version
             db = get_db()
             
-            # For HAP files, try to get versionCode from pack.info
+            # For HAP/APK files, try to get versionCode from metadata
             if platform == 'harmonyos':
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 hap_meta = parse_hap_metadata(file_path)
                 if hap_meta and hap_meta.get('build_number'):
                     build_number = hap_meta['build_number']
+                else:
+                    existing = db.execute(
+                        'SELECT build_number FROM apps WHERE bundle_id = ? AND version = ? ORDER BY CAST(build_number AS INTEGER) DESC LIMIT 1',
+                        (bundle_id, version)
+                    ).fetchone()
+                    if existing and existing['build_number']:
+                        try:
+                            build_number = str(int(existing['build_number']) + 1)
+                        except ValueError:
+                            build_number = '1'
+                    else:
+                        build_number = '1'
+            elif platform == 'android':
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                apk_meta = parse_apk_metadata(file_path)
+                if apk_meta and apk_meta.get('build_number'):
+                    build_number = apk_meta['build_number']
                 else:
                     existing = db.execute(
                         'SELECT build_number FROM apps WHERE bundle_id = ? AND version = ? ORDER BY CAST(build_number AS INTEGER) DESC LIMIT 1',
@@ -401,7 +533,6 @@ def upload():
                         build_number = '1'
                 else:
                     build_number = '1'
-            db.close()
             
             icon_filename = None
             if 'icon_file' in request.files:
@@ -429,10 +560,11 @@ def upload():
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 if platform == 'harmonyos':
                     icon_filename = extract_icon_from_hap(file_path, app.config['UPLOAD_FOLDER'], timestamp)
+                elif platform == 'android':
+                    icon_filename = extract_icon_from_apk(file_path, app.config['UPLOAD_FOLDER'], timestamp)
                 else:
                     icon_filename = extract_icon_from_ipa(file_path, app.config['UPLOAD_FOLDER'], timestamp)
             
-            db = get_db()
             db.execute(
                 'INSERT INTO apps (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform)
@@ -782,6 +914,100 @@ def parse_hap():
         else:
             return jsonify({'error': '无法解析HAP文件'}), 400
     
+    except Exception as e:
+        if 'tmp_path' in locals() and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/parse-apk', methods=['POST'])
+def parse_apk():
+    """Parse APK file metadata"""
+    if 'ipa_file' not in request.files:
+        return jsonify({'error': '没有文件'}), 400
+
+    file = request.files['ipa_file']
+    if file.filename == '':
+        return jsonify({'error': '文件名为空'}), 400
+
+    if not file.filename.lower().endswith('.apk'):
+        return jsonify({'error': '不是APK文件'}), 400
+
+    try:
+        import tempfile
+        import base64
+        import zipfile
+
+        with tempfile.NamedTemporaryFile(suffix='.apk', delete=False) as tmp:
+            file.save(tmp.name)
+            tmp_path = tmp.name
+
+        result = None
+        icon_data = None
+
+        # Parse metadata and icon in one pass using single APK instance
+        try:
+            from androguard.core.apk import APK
+            a = APK(tmp_path)
+            result = {
+                'name': a.get_app_name() or '',
+                'bundle_id': a.get_package() or '',
+                'version': a.get_androidversion_name() or '',
+                'build_number': str(a.get_androidversion_code() or ''),
+            }
+            manifest_icon = a.get_app_icon()
+            if manifest_icon:
+                with zipfile.ZipFile(tmp_path, 'r') as z:
+                    if manifest_icon in z.namelist():
+                        icon_data = z.read(manifest_icon)
+        except Exception:
+            pass
+
+        # Fallback: metadata from zip
+        if not result:
+            result = parse_apk_metadata(tmp_path)
+
+        # Fallback: icon by standard paths
+        if not icon_data or len(icon_data) <= 500:
+            icon_data = None
+            with zipfile.ZipFile(tmp_path, 'r') as z:
+                namelist = z.namelist()
+                densities = ['xxxhdpi', 'xxhdpi', 'xhdpi', 'hdpi', 'mdpi']
+                icon_names = ('ic_launcher.png', 'icon.png', 'app_icon.png')
+
+                for name in namelist:
+                    if name.endswith('.png') and 'icon' in name.lower():
+                        for density in densities:
+                            if f'mipmap-{density}' in name:
+                                for icon_name in icon_names:
+                                    if name.endswith(icon_name):
+                                        icon_data = z.read(name)
+                                        break
+                                if icon_data:
+                                    break
+                        if icon_data:
+                            break
+
+                if not icon_data:
+                    for name in namelist:
+                        if name.endswith('.png') and 'icon' in name.lower():
+                            try:
+                                data = z.read(name)
+                                if len(data) > 1000:
+                                    icon_data = data
+                                    break
+                            except Exception:
+                                continue
+
+        if icon_data and len(icon_data) > 500:
+            result['icon'] = 'data:image/png;base64,' + base64.b64encode(icon_data).decode('utf-8')
+
+        os.unlink(tmp_path)
+
+        if result:
+            return jsonify(result)
+        else:
+            return jsonify({'error': '无法解析APK文件'}), 400
+
     except Exception as e:
         if 'tmp_path' in locals() and os.path.exists(tmp_path):
             os.unlink(tmp_path)

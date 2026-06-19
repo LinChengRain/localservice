@@ -11,6 +11,9 @@
         {% elif client_platform == 'harmonyos' %}
         <h1>鸿蒙应用</h1>
         <p class="subtitle">鸿蒙企业应用分发</p>
+        {% elif client_platform == 'android' %}
+        <h1>Android 应用</h1>
+        <p class="subtitle">Android 企业应用分发</p>
         {% else %}
         <h1>应用分发</h1>
         <p class="subtitle">企业内部应用分发平台</p>
@@ -31,6 +34,7 @@
     <a href="{{ url_for('index') }}" class="platform-filter-btn {% if not request.args.get('platform') %}active{% endif %}">全部</a>
     <a href="{{ url_for('index', platform='ios') }}" class="platform-filter-btn {% if request.args.get('platform') == 'ios' %}active{% endif %}">iOS</a>
     <a href="{{ url_for('index', platform='harmonyos') }}" class="platform-filter-btn {% if request.args.get('platform') == 'harmonyos' %}active{% endif %}">鸿蒙</a>
+    <a href="{{ url_for('index', platform='android') }}" class="platform-filter-btn {% if request.args.get('platform') == 'android' %}active{% endif %}">Android</a>
 </div>
 {% endif %}
 
@@ -57,6 +61,8 @@
                     <span class="app-group-bundle">{{ group.bundle_id }}</span>
                     {% if group.platform == 'harmonyos' %}
                     <span class="platform-tag platform-harmonyos">鸿蒙</span>
+                    {% elif group.platform == 'android' %}
+                    <span class="platform-tag platform-android">Android</span>
                     {% else %}
                     <span class="platform-tag platform-ios">iOS</span>
                     {% endif %}
@@ -133,6 +139,9 @@
     {% elif client_platform == 'harmonyos' %}
     <h3>暂无鸿蒙应用</h3>
     <p>上传第一个鸿蒙企业应用开始分发</p>
+    {% elif client_platform == 'android' %}
+    <h3>暂无 Android 应用</h3>
+    <p>上传第一个 Android 企业应用开始分发</p>
     {% else %}
     <h3>暂无应用</h3>
     <p>上传第一个企业应用开始分发</p>
