@@ -9,14 +9,33 @@
 - ✅ **自签名 HTTPS**：自动生成 10 年有效期证书
 - ✅ **Web 管理界面**：响应式设计，支持移动端访问
 - ✅ **自动解析**：自动提取应用名称、Bundle ID、版本号、图标
-- ✅ **版本分组**：按应用分组显示，版本折叠/展开交互
+- ✅ **版本分组**：按应用分组显示，版本按版本号从高到低排序
 - ✅ **构建管理**：构建号自动累加，区分同一版本的不同构建
+- ✅ **搜索功能**：支持按名称、Bundle ID、描述搜索，搜索结果高亮
+- ✅ **分页显示**：应用列表支持分页浏览
+- ✅ **Changelog**：上传时填写更新日志，安装页展示版本历史
+- ✅ **应用编辑**：支持修改应用名称、描述、包类型
+- ✅ **下载统计**：记录并展示应用下载次数
+- ✅ **统计概览**：首页显示应用总数和总下载次数
 
 ### 安全特性
 - ✅ **访问控制**：公网只读，内网可配置登录
 - ✅ **CSRF 防护**：Flask-WTF 表单保护
 - ✅ **登录认证**：Flask-Login + 密码哈希存储
-- ✅ **Docker 部署**：一键容器化部署
+- ✅ **暴力破解防护**：连续登录失败锁定（可配置次数和时间）
+- ✅ **安全响应头**：X-Frame-Options、X-Content-Type-Options 等
+- ✅ **Session 超时**：可配置会话有效期
+- ✅ **CDN SRI 校验**：外部脚本完整性验证
+- ✅ **文件类型校验**：上传文件魔数校验
+
+### 用户体验
+- ✅ **拖拽上传**：支持拖拽文件到上传区域
+- ✅ **上传进度条**：实时显示上传进度
+- ✅ **Flash 消息**：自动消失 + 手动关闭
+- ✅ **最新版本标识**：自动标记最新版本
+- ✅ **自动展开**：首页自动展开最新版本的构建列表
+- ✅ **自定义错误页**：404、413、500 错误页面
+- ✅ **暗色模式**：跟随系统主题自动切换
 
 ### 平台特性
 - ✅ **包类型选择**：支持正式版、准生产、测试版、调试版
@@ -29,6 +48,7 @@
 - ✅ **HarmonyOS**：通过 `store://enterprise/manifest` DeepLink 安装
 - ✅ **Android**：直接下载 APK 安装
 - ✅ **公网访问**：支持 Cloudflared 隧道实现公网分发
+- ✅ **QR 码**：安装页面自动生成扫码安装二维码
 
 ## 快速开始
 
@@ -86,6 +106,21 @@ LAN_REQUIRE_LOGIN=false
 # 管理员账户（首次启动时自动创建）
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=changeme
+
+# API Key（为空则不启用API认证）
+API_KEY=
+
+# Session 超时时间（秒，默认7天）
+PERMANENT_SESSION_LIFETIME=604800
+
+# 登录失败最大尝试次数（默认5次）
+MAX_LOGIN_ATTEMPTS=5
+
+# 登录锁定时间（秒，默认300秒=5分钟）
+LOGIN_LOCKOUT_SECONDS=300
+
+# 每页显示数量（默认20）
+PER_PAGE=20
 ```
 
 ### 访问控制
@@ -114,7 +149,8 @@ ADMIN_PASSWORD=changeme
 1. 访问管理界面，点击 **上传应用**
 2. 选择 IPA 文件（自动解析应用信息）
 3. 选择包类型（测试版/正式版等）
-4. 点击上传
+4. 可选填写更新日志
+5. 点击上传
 
 #### 第三步：安装应用
 
@@ -135,7 +171,8 @@ ADMIN_PASSWORD=changeme
 1. 访问管理界面，点击 **上传应用**
 2. 选择 HAP 文件（自动解析 module.json）
 3. 选择包类型
-4. 点击上传
+4. 可选填写更新日志
+5. 点击上传
 
 #### 第二步：安装应用
 
@@ -151,7 +188,8 @@ ADMIN_PASSWORD=changeme
 1. 访问管理界面，点击 **上传应用**
 2. 选择 APK 文件（自动解析 AndroidManifest）
 3. 选择包类型
-4. 点击上传
+4. 可选填写更新日志
+5. 点击上传
 
 #### 第二步：安装应用
 
@@ -172,20 +210,25 @@ localservice/
 │       ├── main.py         # 首页、安装页、下载
 │       ├── auth.py         # 登录认证
 │       ├── upload.py       # 上传功能
-│       ├── admin.py        # 管理功能
+│       ├── admin.py        # 管理功能（编辑、备份）
 │       └── api.py          # JSON API 接口
 ├── templates/              # HTML 模板
 │   ├── base.html           # 基础模板
 │   ├── index.html          # 首页（应用列表）
 │   ├── upload.html         # 上传页面
 │   ├── install.html        # 安装页面
-│   └── login.html          # 登录页面
+│   ├── login.html          # 登录页面
+│   ├── edit.html           # 编辑页面
+│   ├── 404.html            # 404 错误页面
+│   ├── 413.html            # 413 错误页面
+│   └── 500.html            # 500 错误页面
 ├── static/                 # 静态文件
 │   └── style.css           # 样式文件
 ├── run.py                  # 开发启动入口
 ├── wsgi.py                 # Gunicorn 生产入口
 ├── requirements.txt        # Python 依赖
 ├── .env.example            # 环境变量示例
+├── .dockerignore           # Docker 排除文件
 ├── Dockerfile              # Docker 镜像
 ├── docker-compose.yml      # Docker Compose 配置
 ├── start.sh                # 一键启动脚本
@@ -203,13 +246,15 @@ localservice/
 | `/` | GET | 应用列表页面 |
 | `/upload` | GET/POST | 上传页面/上传应用（需内网） |
 | `/install/<id>` | GET | 安装页面 |
+| `/edit/<id>` | GET/POST | 编辑应用信息（需内网） |
 | `/manifest/<id>` | GET | iOS manifest.plist |
 | `/manifest-harmony/<id>.json5` | GET | 鸿蒙 manifest JSON5 |
-| `/download/<filename>` | GET | 下载文件 |
+| `/download/<filename>` | GET | 下载文件（图标无需登录） |
 | `/cert` | GET | 下载证书 |
 | `/health` | GET | 健康检查 |
-| `/auth/login` | GET/POST | 登录页面 |
+| `/auth/login` | GET/POST | 登录页面（公网可达） |
 | `/auth/logout` | GET | 退出登录 |
+| `/admin/backup` | GET | 下载数据库备份（需登录） |
 | `/api/apps` | GET | 应用列表（JSON） |
 | `/api/apps/grouped` | GET | 分组应用列表（JSON） |
 | `/api/parse-ipa` | POST | 解析 IPA 文件元数据 |
@@ -250,6 +295,22 @@ CREATE TABLE download_logs (
     ip_address TEXT,                     -- 下载者IP
     user_agent TEXT,                     -- 浏览器信息
     downloaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 更新日志表
+CREATE TABLE changelogs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    app_id INTEGER NOT NULL,             -- 应用ID
+    version TEXT NOT NULL,               -- 版本号
+    content TEXT,                        -- 更新内容
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 登录尝试记录表
+CREATE TABLE login_attempts (
+    username TEXT PRIMARY KEY,           -- 用户名
+    attempts INTEGER DEFAULT 0,          -- 失败次数
+    locked_until REAL                    -- 锁定截止时间
 );
 ```
 
@@ -329,6 +390,12 @@ A: 启动时指定服务器地址：
 ```bash
 python3 run.py --ngrok --server your-domain.com
 ```
+
+### Q: 如何修改管理员密码？
+A: 修改 `.env` 文件中的 `ADMIN_PASSWORD`，重启服务后自动生效。
+
+### Q: 如何备份数据库？
+A: 登录后访问 `/admin/backup` 下载数据库备份文件。
 
 ## 技术栈
 

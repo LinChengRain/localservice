@@ -85,9 +85,11 @@ def create_app(config_name=None):
     def highlight_filter(text, query):
         if not query or not text:
             return text
+        from markupsafe import Markup, escape
         import re
+        safe_text = escape(text)
         pattern = re.compile(re.escape(query), re.IGNORECASE)
-        return pattern.sub(lambda m: f'<mark>{m.group()}</mark>', text)
+        return Markup(pattern.sub(lambda m: f'<mark>{m.group()}</mark>', safe_text))
 
     @app.context_processor
     def inject_globals():

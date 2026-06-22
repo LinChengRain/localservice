@@ -67,13 +67,23 @@ def index():
 
         grouped[group_key]['versions'][ver].append(dict(app))
 
+    for group in grouped.values():
+        sorted_versions = {}
+        for ver in sorted(group['versions'].keys(),
+                         key=lambda v: [int(x) if x.isdigit() else x for x in v.replace('-', '.').split('.')],
+                         reverse=True):
+            sorted_versions[ver] = sorted(group['versions'][ver],
+                                         key=lambda x: x['upload_time'] or '',
+                                         reverse=True)
+        group['versions'] = sorted_versions
+
     server_ip = get_server_ip()
     lan_ip = get_lan_ip()
     is_lan = is_lan_access(request.host)
 
     stats = None
     if is_lan:
-        total_apps = db.execute('SELECT COUNT(*) as cnt FROM apps').fetchone()['cnt']
+        total_apps = db.execute('SELECT COUNT(DISTINCT bundle_id || "_" || platform) as cnt FROM apps').fetchone()['cnt']
         total_downloads = db.execute('SELECT COUNT(*) as cnt FROM download_logs').fetchone()['cnt']
         stats = {'total_apps': total_apps, 'total_downloads': total_downloads}
 
