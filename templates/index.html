@@ -33,7 +33,7 @@
 <div class="platform-filter">
     <a href="{{ url_for('index') }}" class="platform-filter-btn {% if not request.args.get('platform') %}active{% endif %}">全部</a>
     <a href="{{ url_for('index', platform='ios') }}" class="platform-filter-btn {% if request.args.get('platform') == 'ios' %}active{% endif %}">iOS</a>
-    <a href="{{ url_for('index', platform='harmonyos') }}" class="platform-filter-btn {% if request.args.get('platform') == 'harmonyos' %}active{% endif %}">鸿蒙</a>
+    <a href="{{ url_for('index', platform='harmonyos') }}" class="platform-filter-btn {% if request.args.get('platform') == 'harmonyos' %}active{% endif %}">Harmony</a>
     <a href="{{ url_for('index', platform='android') }}" class="platform-filter-btn {% if request.args.get('platform') == 'android' %}active{% endif %}">Android</a>
 </div>
 {% endif %}
