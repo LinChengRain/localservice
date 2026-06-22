@@ -138,8 +138,8 @@ def upload():
                     icon_filename = extract_icon_from_ipa(file_path, current_app.config['UPLOAD_FOLDER'], timestamp)
 
             db.execute(
-                'INSERT INTO apps (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform)
+                'INSERT INTO apps (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform, upload_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
             )
             db.commit()
 
@@ -147,8 +147,8 @@ def upload():
             if changelog:
                 app_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
                 db.execute(
-                    'INSERT INTO changelogs (app_id, version, content) VALUES (?, ?, ?)',
-                    (app_id, version, changelog)
+                    'INSERT INTO changelogs (app_id, version, content, created_at) VALUES (?, ?, ?, ?)',
+                    (app_id, version, changelog, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 )
                 db.commit()
 

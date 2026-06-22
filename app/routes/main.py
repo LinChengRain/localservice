@@ -6,6 +6,7 @@ from app.utils import get_server_ip, get_lan_ip, is_lan_access, detect_platform,
 import os
 import json
 import plistlib
+from datetime import datetime
 
 
 @main_bp.route('/')
@@ -288,8 +289,8 @@ def download(filename):
     db = get_db()
     app_data = db.execute('SELECT id FROM apps WHERE filename = ?', (filename,)).fetchone()
     if app_data:
-        db.execute('INSERT INTO download_logs (app_id, ip_address, user_agent) VALUES (?, ?, ?)',
-                   (app_data['id'], request.remote_addr, request.headers.get('User-Agent', '')))
+        db.execute('INSERT INTO download_logs (app_id, ip_address, user_agent, downloaded_at) VALUES (?, ?, ?, ?)',
+                   (app_data['id'], request.remote_addr, request.headers.get('User-Agent', ''), datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         db.commit()
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename, as_attachment=not is_icon)
 
