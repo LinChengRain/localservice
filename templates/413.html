@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}文件过大{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="error-code">413</div>
+    <h1 class="error-message">文件过大</h1>
+    <p class="error-desc">上传的文件超过了大小限制（最大 500MB）</p>
+    <a href="{{ url_for('upload.upload') }}" class="btn btn-primary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        重新上传
+    </a>
+</div>
+{% endblock %}

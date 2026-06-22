@@ -58,6 +58,18 @@ def create_app(config_name=None):
 
     csrf.exempt(api_bp)
 
+    @app.errorhandler(404)
+    def not_found(e):
+        return render_template('404.html'), 404
+
+    @app.errorhandler(413)
+    def too_large(e):
+        return render_template('413.html'), 413
+
+    @app.errorhandler(500)
+    def server_error(e):
+        return render_template('500.html'), 500
+
     @app.context_processor
     def inject_globals():
         from app.utils import get_server_ip, get_lan_ip, is_lan_access, detect_platform

@@ -1,9 +1,10 @@
 from flask import render_template, request, redirect, url_for, send_from_directory, jsonify, flash, current_app
+from flask_login import login_required, current_user
 from app.routes import main_bp
 from app.models import get_db
 from app.utils import get_server_ip, get_lan_ip, is_lan_access, detect_platform, file_sha256
-from flask_login import current_user
 import os
+import json
 import plistlib
 
 
@@ -11,14 +12,41 @@ import plistlib
 def index():
     platform = detect_platform()
     filter_platform = request.args.get('platform', '')
+    search_query = request.args.get('q', '').strip()
 
     db = get_db()
+    query = 'SELECT * FROM apps'
+    params = []
+    conditions = []
+
     if platform != 'all':
-        apps = db.execute('SELECT * FROM apps WHERE platform = ? ORDER BY upload_time DESC', (platform,)).fetchall()
+        conditions.append('platform = ?')
+        params.append(platform)
     elif filter_platform and filter_platform in ('ios', 'harmonyos', 'android'):
-        apps = db.execute('SELECT * FROM apps WHERE platform = ? ORDER BY upload_time DESC', (filter_platform,)).fetchall()
-    else:
-        apps = db.execute('SELECT * FROM apps ORDER BY upload_time DESC').fetchall()
+        conditions.append('platform = ?')
+        params.append(filter_platform)
+
+    if search_query:
+        conditions.append('(name LIKE ? OR bundle_id LIKE ? OR description LIKE ?)')
+        search_pattern = f'%{search_query}%'
+        params.extend([search_pattern, search_pattern, search_pattern])
+
+    if conditions:
+        query += ' WHERE ' + ' AND '.join(conditions)
+
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    offset = (page - 1) * per_page
+
+    count_query = 'SELECT COUNT(*) as cnt FROM apps'
+    if conditions:
+        count_query += ' WHERE ' + ' AND '.join(conditions)
+    total = db.execute(count_query, params).fetchone()['cnt']
+    total_pages = (total + per_page - 1) // per_page
+
+    query += ' ORDER BY upload_time DESC LIMIT ? OFFSET ?'
+    params.extend([per_page, offset])
+    apps = db.execute(query, params).fetchall()
 
     grouped = {}
     for app in apps:
@@ -45,7 +73,9 @@ def index():
 
     return render_template('index.html', apps=apps, grouped_apps=grouped.values(),
                          server_ip=server_ip, is_lan=is_lan,
-                         client_platform=platform)
+                         client_platform=platform,
+                         page=page, total_pages=total_pages,
+                         search_query=search_query)
 
 
 @main_bp.route('/install/<int:app_id>')
@@ -57,13 +87,24 @@ def install(app_id):
         flash('应用不存在')
         return redirect(url_for('main.index'))
 
+    changelogs = db.execute(
+        'SELECT * FROM changelogs WHERE app_id = ? ORDER BY created_at DESC',
+        (app_id,)
+    ).fetchall()
+
+    download_count = db.execute(
+        'SELECT COUNT(*) as cnt FROM download_logs WHERE app_id = ?',
+        (app_id,)
+    ).fetchone()['cnt']
+
     host = request.host
     if host.startswith('127.') or host.startswith('localhost'):
         server_ip = get_server_ip()
     else:
         server_ip = host
 
-    return render_template('install.html', app=app_data, server_ip=server_ip)
+    return render_template('install.html', app=app_data, server_ip=server_ip,
+                         changelogs=changelogs, download_count=download_count)
 
 
 @main_bp.route('/manifest/<int:app_id>')
@@ -159,7 +200,7 @@ def manifest_harmony(app_id):
     }
 
     response = current_app.response_class(
-        response=__import__('json').dumps(manifest_data, indent=2, ensure_ascii=False),
+        response=json.dumps(manifest_data, indent=2, ensure_ascii=False),
         status=200,
         mimetype='application/json'
     )
@@ -209,7 +250,7 @@ def manifest_harmony_json5(app_id):
     }
 
     response = current_app.response_class(
-        response=__import__('json').dumps(manifest_data, indent=2, ensure_ascii=False),
+        response=json.dumps(manifest_data, indent=2, ensure_ascii=False),
         status=200,
         mimetype='application/json'
     )
@@ -219,6 +260,12 @@ def manifest_harmony_json5(app_id):
 
 @main_bp.route('/download/<filename>')
 def download(filename):
+    host = request.host
+    if is_lan_access(host) and current_app.config.get('LAN_REQUIRE_LOGIN', False):
+        if not current_user.is_authenticated:
+            flash('请先登录')
+            return redirect(url_for('auth.login'))
+
     db = get_db()
     app_data = db.execute('SELECT id FROM apps WHERE filename = ?', (filename,)).fetchone()
     if app_data:

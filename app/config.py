@@ -3,9 +3,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+_env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+
+_secret_key = os.getenv('SECRET_KEY')
+if not _secret_key:
+    _secret_key = os.urandom(24).hex()
+    with open(_env_file, 'a') as f:
+        f.write(f'\nSECRET_KEY={_secret_key}\n')
+
 
 class Config:
-    SECRET_KEY = os.getenv('SECRET_KEY', os.urandom(24).hex())
+    SECRET_KEY = _secret_key
     DATABASE = os.getenv('DATABASE', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'apps.db'))
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'uploads'))
     CERT_FOLDER = os.getenv('CERT_FOLDER', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'certs'))
@@ -13,6 +21,7 @@ class Config:
     LAN_REQUIRE_LOGIN = os.getenv('LAN_REQUIRE_LOGIN', 'false').lower() == 'true'
     ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
     ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'changeme')
+    API_KEY = os.getenv('API_KEY', '')
 
 
 class TestingConfig(Config):

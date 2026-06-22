@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}编辑 {{ app.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-header-left">
+        <h1>编辑应用</h1>
+        <p class="subtitle">修改 {{ app.name }} 的信息</p>
+    </div>
+    <a href="{{ url_for('main.install', app_id=app.id) }}" class="btn btn-ghost">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        返回
+    </a>
+</div>
+
+<div class="upload-form">
+    <form action="{{ url_for('admin.edit', app_id=app.id) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="edit-preview">
+            {% if app.icon_filename %}
+            <img src="{{ url_for('main.download', filename=app.icon_filename) }}" alt="{{ app.name }}" class="edit-icon">
+            {% else %}
+            <div class="app-icon-placeholder" style="width:64px;height:64px;">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5">
+                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                    <line x1="12" y1="18" x2="12" y2="18.01" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </div>
+            {% endif %}
+            <div class="edit-meta">
+                <span class="meta-tag">v{{ app.version }}</span>
+                <span class="meta-tag">构建 #{{ app.build_number }}</span>
+                {% set type_names = {'release': '正式版', 'staging': '准生产', 'testing': '测试版', 'debug': '调试版'} %}
+                <span class="meta-tag build-type-{{ app.build_type }}">{{ type_names.get(app.build_type, app.build_type) }}</span>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="name">应用名称</label>
+            <input type="text" id="name" name="name" value="{{ app.name }}" required>
+        </div>
+
+        <div class="form-group">
+            <label for="build_type">包类型</label>
+            <select id="build_type" name="build_type">
+                <option value="testing" {% if app.build_type == 'testing' %}selected{% endif %}>测试版</option>
+                <option value="staging" {% if app.build_type == 'staging' %}selected{% endif %}>准生产</option>
+                <option value="release" {% if app.build_type == 'release' %}selected{% endif %}>正式版</option>
+                <option value="debug" {% if app.build_type == 'debug' %}selected{% endif %}>调试版</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="description">描述</label>
+            <textarea id="description" name="description" rows="3">{{ app.description or '' }}</textarea>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">保存修改</button>
+        </div>
+    </form>
+</div>
+
+<style>
+.edit-preview {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+}
+
+.edit-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 14px;
+    object-fit: cover;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.edit-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+</style>
+{% endblock %}

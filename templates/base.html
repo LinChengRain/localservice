@@ -18,7 +18,12 @@
         <div class="nav-links">
             <a href="{{ url_for('main.index') }}">应用</a>
             {% if is_lan %}
-            <a href="{{ url_for('upload.upload') }}">上传</a>
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('admin.backup') }}">备份</a>
+            <a href="{{ url_for('auth.logout') }}">退出</a>
+            {% else %}
+            <a href="{{ url_for('auth.login') }}">登录</a>
+            {% endif %}
             {% endif %}
             <a href="{{ url_for('main.download_cert') }}">证书</a>
             <button class="btn-nav-icon" id="showQrBtn" title="显示二维码">

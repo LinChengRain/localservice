@@ -1,13 +1,27 @@
 import os
 import json
 import tempfile
+from functools import wraps
 from flask import request, jsonify, current_app
 from app.routes import api_bp
 from app.models import get_db
 from app.utils import parse_apk_metadata, parse_hap_metadata, extract_icon_from_apk
 
 
+def require_api_key(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        api_key = current_app.config.get('API_KEY', '')
+        if api_key:
+            provided_key = request.headers.get('X-API-Key', '') or request.args.get('api_key', '')
+            if provided_key != api_key:
+                return jsonify({'error': 'Invalid API key'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
 @api_bp.route('/apps')
+@require_api_key
 def api_apps():
     db = get_db()
     apps = db.execute('SELECT * FROM apps ORDER BY upload_time DESC').fetchall()
@@ -15,6 +29,7 @@ def api_apps():
 
 
 @api_bp.route('/apps/grouped')
+@require_api_key
 def api_apps_grouped():
     db = get_db()
     apps = db.execute('''
@@ -45,6 +60,7 @@ def api_apps_grouped():
 
 
 @api_bp.route('/parse-ipa', methods=['POST'])
+@require_api_key
 def parse_ipa():
     if 'ipa_file' not in request.files:
         return jsonify({'error': '没有文件'}), 400
@@ -105,6 +121,7 @@ def parse_ipa():
 
 
 @api_bp.route('/parse-hap', methods=['POST'])
+@require_api_key
 def parse_hap():
     if 'ipa_file' not in request.files:
         return jsonify({'error': '没有文件'}), 400
@@ -136,6 +153,7 @@ def parse_hap():
 
 
 @api_bp.route('/parse-apk', methods=['POST'])
+@require_api_key
 def parse_apk():
     if 'ipa_file' not in request.files:
         return jsonify({'error': '没有文件'}), 400

@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from flask import render_template, request, redirect, url_for, flash
+from flask import render_template, request, redirect, url_for, flash, current_app
 from werkzeug.utils import secure_filename
 from app.routes import upload_bp
 from app.models import get_db
@@ -10,9 +10,23 @@ from app.utils import (admin_required, extract_icon_from_ipa, extract_icon_from_
 
 ALLOWED_EXTENSIONS = {'ipa', 'hap', 'apk', 'png', 'jpg', 'jpeg'}
 
+MAGIC_BYTES = {
+    'ipa': b'PK',
+    'hap': b'PK',
+    'apk': b'PK',
+}
+
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def validate_file_magic(file_obj, ext):
+    if ext not in MAGIC_BYTES:
+        return True
+    header = file_obj.read(2)
+    file_obj.seek(0)
+    return header == MAGIC_BYTES[ext]
 
 
 @upload_bp.route('/upload', methods=['GET', 'POST'])
@@ -30,9 +44,15 @@ def upload():
 
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
+            ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+
+            if ext in MAGIC_BYTES and not validate_file_magic(file, ext):
+                flash('文件格式无效，请上传有效的 IPA、HAP 或 APK 文件')
+                return redirect(request.url)
+
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_')
             filename = timestamp + filename
-            file.save(os.path.join(__import__('flask').current_app.config['UPLOAD_FOLDER'], filename))
+            file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
 
             if filename.lower().endswith('.hap'):
                 platform = 'harmonyos'
@@ -51,7 +71,7 @@ def upload():
             build_number = ''
 
             if platform == 'harmonyos':
-                file_path = os.path.join(__import__('flask').current_app.config['UPLOAD_FOLDER'], filename)
+                file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
                 hap_meta = parse_hap_metadata(file_path)
                 if hap_meta:
                     if not name and hap_meta.get('name'):
@@ -63,7 +83,7 @@ def upload():
                     if hap_meta.get('build_number'):
                         build_number = hap_meta['build_number']
             elif platform == 'android':
-                file_path = os.path.join(__import__('flask').current_app.config['UPLOAD_FOLDER'], filename)
+                file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
                 apk_meta = parse_apk_metadata(file_path)
                 if apk_meta:
                     if not name and apk_meta.get('name'):
@@ -94,7 +114,7 @@ def upload():
                 if icon_file and allowed_file(icon_file.filename):
                     icon_filename = secure_filename(icon_file.filename)
                     icon_filename = timestamp + icon_filename
-                    icon_file.save(os.path.join(__import__('flask').current_app.config['UPLOAD_FOLDER'], icon_filename))
+                    icon_file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], icon_filename))
 
             extracted_icon = request.form.get('extracted_icon', '')
             if not icon_filename and extracted_icon and extracted_icon.startswith('data:image'):
@@ -102,26 +122,35 @@ def upload():
                     import base64
                     icon_data = base64.b64decode(extracted_icon.split(',')[1])
                     icon_filename = f"{timestamp}icon.png"
-                    icon_path = os.path.join(__import__('flask').current_app.config['UPLOAD_FOLDER'], icon_filename)
+                    icon_path = os.path.join(current_app.config['UPLOAD_FOLDER'], icon_filename)
                     with open(icon_path, 'wb') as f:
                         f.write(icon_data)
                 except:
                     pass
 
             if not icon_filename:
-                file_path = os.path.join(__import__('flask').current_app.config['UPLOAD_FOLDER'], filename)
+                file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
                 if platform == 'harmonyos':
-                    icon_filename = extract_icon_from_hap(file_path, __import__('flask').current_app.config['UPLOAD_FOLDER'], timestamp)
+                    icon_filename = extract_icon_from_hap(file_path, current_app.config['UPLOAD_FOLDER'], timestamp)
                 elif platform == 'android':
-                    icon_filename = extract_icon_from_apk(file_path, __import__('flask').current_app.config['UPLOAD_FOLDER'], timestamp)
+                    icon_filename = extract_icon_from_apk(file_path, current_app.config['UPLOAD_FOLDER'], timestamp)
                 else:
-                    icon_filename = extract_icon_from_ipa(file_path, __import__('flask').current_app.config['UPLOAD_FOLDER'], timestamp)
+                    icon_filename = extract_icon_from_ipa(file_path, current_app.config['UPLOAD_FOLDER'], timestamp)
 
             db.execute(
                 'INSERT INTO apps (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform)
             )
             db.commit()
+
+            changelog = request.form.get('changelog', '').strip()
+            if changelog:
+                app_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+                db.execute(
+                    'INSERT INTO changelogs (app_id, version, content) VALUES (?, ?, ?)',
+                    (app_id, version, changelog)
+                )
+                db.commit()
 
             flash('应用上传成功')
             return redirect(url_for('main.index'))

@@ -77,6 +77,14 @@ def init_db(app):
             )
         ''')
 
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                username TEXT PRIMARY KEY,
+                attempts INTEGER DEFAULT 0,
+                locked_until REAL
+            )
+        ''')
+
         db.commit()
 
         _ensure_admin_user(db, app.config.get('ADMIN_USERNAME', 'admin'),

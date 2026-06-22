@@ -21,7 +21,7 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-group">
             <label for="ipa_file">安装包文件 *</label>
-            <div class="file-input-wrapper">
+            <div class="file-input-wrapper" id="dropZone">
                 <input type="file" id="ipa_file" name="ipa_file" accept=".ipa,.hap,.apk" required>
                 <div class="file-input-hint" id="fileHint">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -32,6 +32,13 @@
                     <span>点击选择或拖拽 IPA / HAP / APK 文件</span>
                 </div>
             </div>
+        </div>
+
+        <div class="upload-progress" id="uploadProgress" style="display: none;">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <span class="progress-text" id="progressText">0%</span>
         </div>
 
         <div class="form-loading" id="loadingIndicator" style="display: none;">
@@ -74,6 +81,11 @@
             <textarea id="description" name="description" rows="2" placeholder="可选：应用简介"></textarea>
         </div>
 
+        <div class="form-group">
+            <label for="changelog">更新日志</label>
+            <textarea id="changelog" name="changelog" rows="3" placeholder="可选：本次更新内容"></textarea>
+        </div>
+
         <input type="hidden" id="extracted_icon" name="extracted_icon" value="">
 
         <div class="form-actions">
@@ -95,8 +107,37 @@
 
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
-document.getElementById('ipa_file').addEventListener('change', function(e) {
-    var file = e.target.files[0];
+var dropZone = document.getElementById('dropZone');
+var fileInput = document.getElementById('ipa_file');
+
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(eventName) {
+    dropZone.addEventListener(eventName, function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }, false);
+});
+
+['dragenter', 'dragover'].forEach(function(eventName) {
+    dropZone.addEventListener(eventName, function() {
+        dropZone.classList.add('drag-over');
+    }, false);
+});
+
+['dragleave', 'drop'].forEach(function(eventName) {
+    dropZone.addEventListener(eventName, function() {
+        dropZone.classList.remove('drag-over');
+    }, false);
+});
+
+dropZone.addEventListener('drop', function(e) {
+    var files = e.dataTransfer.files;
+    if (files.length > 0) {
+        fileInput.files = files;
+        fileInput.dispatchEvent(new Event('change'));
+    }
+}, false);
+
+function handleFile(file) {
     if (!file) return;
 
     document.getElementById('fileHint').innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34c759" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>' + file.name + '</span>';
@@ -112,19 +153,31 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
     var isApk = file.name.toLowerCase().endsWith('.apk');
     var parseUrl = isApk ? '/api/parse-apk' : (isHap ? '/api/parse-hap' : '/api/parse-ipa');
 
-    var progressSteps = isApk ? ['正在上传文件...', '正在解析元数据...', '正在提取图标...', '解析完成'] : ['正在上传文件...', '正在解析...', '解析完成'];
-    var stepIndex = 0;
-    var progressTimer = setInterval(function() {
-        if (stepIndex < progressSteps.length - 1) {
-            stepIndex++;
-            document.getElementById('loadingText').textContent = progressSteps[stepIndex];
-        }
-    }, 800);
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', parseUrl, true);
 
-    fetch(parseUrl, { method: 'POST', body: formData })
-        .then(function(res) { return res.json(); })
-        .then(function(result) {
-            clearInterval(progressTimer);
+    var progressEl = document.getElementById('uploadProgress');
+    var progressFill = document.getElementById('progressFill');
+    var progressText = document.getElementById('progressText');
+
+    xhr.upload.addEventListener('progress', function(e) {
+        if (e.lengthComputable) {
+            var percent = Math.round((e.loaded / e.total) * 100);
+            progressFill.style.width = percent + '%';
+            progressText.textContent = percent + '%';
+            if (percent < 100) {
+                progressEl.style.display = 'flex';
+            }
+        }
+    });
+
+    xhr.addEventListener('load', function() {
+        progressEl.style.display = 'none';
+        progressFill.style.width = '0%';
+        progressText.textContent = '0%';
+
+        if (xhr.status === 200) {
+            var result = JSON.parse(xhr.responseText);
             if (result.error) { alert('解析失败: ' + result.error); return; }
             document.getElementById('loadingText').textContent = '解析完成';
             document.getElementById('name').value = result.name || '';
@@ -140,11 +193,19 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
                 document.getElementById('loadingIndicator').style.display = 'none';
                 document.getElementById('submitBtn').disabled = false;
             }, 300);
-        })
-        .catch(function(err) {
-            clearInterval(progressTimer);
-            alert('解析失败: ' + err.message);
-        });
+        } else {
+            alert('解析失败');
+            document.getElementById('loadingIndicator').style.display = 'none';
+        }
+    });
+
+    xhr.addEventListener('error', function() {
+        progressEl.style.display = 'none';
+        alert('上传失败');
+        document.getElementById('loadingIndicator').style.display = 'none';
+    });
+
+    xhr.send(formData);
 
     if (isApk) {
         return;
@@ -227,6 +288,10 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
         };
         reader.readAsArrayBuffer(file);
     }
+}
+
+fileInput.addEventListener('change', function(e) {
+    handleFile(e.target.files[0]);
 });
 </script>
 

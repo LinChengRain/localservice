@@ -10,8 +10,13 @@ env/
 # Database
 *.db
 
+# Environment
+.env
+
 # Uploads
 uploads/*.ipa
+uploads/*.hap
+uploads/*.apk
 uploads/*.png
 uploads/*.jpg
 uploads/*.jpeg
@@ -31,3 +36,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Agent memory
+.mimocode/

@@ -30,6 +30,12 @@
 </div>
 
 {% if client_platform == 'all' %}
+<div class="search-bar">
+    <form action="{{ url_for('main.index') }}" method="GET">
+        <input type="text" class="search-input" name="q" placeholder="搜索应用名称、Bundle ID..." value="{{ request.args.get('q', '') }}">
+    </form>
+</div>
+
 <div class="platform-filter">
     <a href="{{ url_for('main.index') }}" class="platform-filter-btn {% if not request.args.get('platform') %}active{% endif %}">全部</a>
     <a href="{{ url_for('main.index', platform='ios') }}" class="platform-filter-btn {% if request.args.get('platform') == 'ios' %}active{% endif %}">iOS</a>
@@ -60,7 +66,7 @@
                 <div class="app-group-meta">
                     <span class="app-group-bundle">{{ group.bundle_id }}</span>
                     {% if group.platform == 'harmonyos' %}
-                    <span class="platform-tag platform-harmonyos">鸿蒙</span>
+                    <span class="platform-tag platform-harmonyos">Harmony</span>
                     {% elif group.platform == 'android' %}
                     <span class="platform-tag platform-android">Android</span>
                     {% else %}
@@ -75,6 +81,9 @@
             <div class="version-section">
                 <div class="version-header" onclick="toggleVersion(this)">
                     <span class="version-tag">v{{ version }}</span>
+                    {% if loop.first %}
+                    <span class="latest-badge">最新</span>
+                    {% endif %}
                     <span class="build-count">{{ builds|length }} 个构建</span>
                     <svg class="version-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="6 9 12 15 18 9"/>
@@ -125,6 +134,20 @@
     </div>
     {% endfor %}
 </div>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('main.index', page=page-1, q=search_query, platform=request.args.get('platform', '')) }}" class="pagination-btn">上一页</a>
+    {% endif %}
+
+    <span class="pagination-info">第 {{ page }} / {{ total_pages }} 页</span>
+
+    {% if page < total_pages %}
+    <a href="{{ url_for('main.index', page=page+1, q=search_query, platform=request.args.get('platform', '')) }}" class="pagination-btn">下一页</a>
+    {% endif %}
+</div>
+{% endif %}
 
 {% else %}
 <div class="empty-state">
