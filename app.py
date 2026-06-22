@@ -545,12 +545,13 @@ def index():
     else:
         apps = db.execute('SELECT * FROM apps ORDER BY upload_time DESC').fetchall()
     
-    # Group apps by bundle_id
+    # Group apps by bundle_id + platform
     grouped = {}
     for app in apps:
         bid = app['bundle_id']
-        if bid not in grouped:
-            grouped[bid] = {
+        group_key = f"{bid}_{app['platform']}"
+        if group_key not in grouped:
+            grouped[group_key] = {
                 'bundle_id': bid,
                 'name': app['name'],
                 'icon_filename': app['icon_filename'],
@@ -559,10 +560,10 @@ def index():
             }
         
         ver = app['version']
-        if ver not in grouped[bid]['versions']:
-            grouped[bid]['versions'][ver] = []
+        if ver not in grouped[group_key]['versions']:
+            grouped[group_key]['versions'][ver] = []
         
-        grouped[bid]['versions'][ver].append(dict(app))
+        grouped[group_key]['versions'][ver].append(dict(app))
     
     db.close()
     server_ip = get_server_ip()
@@ -914,8 +915,9 @@ def api_apps_grouped():
     grouped = {}
     for app in apps:
         bid = app['bundle_id']
-        if bid not in grouped:
-            grouped[bid] = {
+        group_key = f"{bid}_{app['platform']}"
+        if group_key not in grouped:
+            grouped[group_key] = {
                 'bundle_id': bid,
                 'name': app['name'],
                 'icon_filename': app['icon_filename'],
@@ -924,10 +926,10 @@ def api_apps_grouped():
             }
         
         ver = app['version']
-        if ver not in grouped[bid]['versions']:
-            grouped[bid]['versions'][ver] = []
+        if ver not in grouped[group_key]['versions']:
+            grouped[group_key]['versions'][ver] = []
         
-        grouped[bid]['versions'][ver].append(dict(app))
+        grouped[group_key]['versions'][ver].append(dict(app))
     
     return jsonify(list(grouped.values()))
 
