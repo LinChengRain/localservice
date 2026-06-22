@@ -13,7 +13,7 @@ fi
 
 # 停止已有的服务
 echo "停止已有的服务..."
-pkill -f "python3 app.py" 2>/dev/null
+pkill -f "python3 run.py" 2>/dev/null
 pkill cloudflared 2>/dev/null
 sleep 1
 
@@ -35,7 +35,7 @@ echo ""
 echo "启动应用分发服务..."
 
 # 启动Flask服务（后台运行）
-python3 app.py --ngrok --server localhost &
+python3 run.py --ngrok --http-port 8080 --server localhost &
 FLASK_PID=$!
 
 # 等待Flask启动
