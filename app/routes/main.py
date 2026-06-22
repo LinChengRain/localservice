@@ -260,11 +260,14 @@ def manifest_harmony_json5(app_id):
 
 @main_bp.route('/download/<filename>')
 def download(filename):
-    host = request.host
-    if is_lan_access(host) and current_app.config.get('LAN_REQUIRE_LOGIN', False):
-        if not current_user.is_authenticated:
-            flash('请先登录')
-            return redirect(url_for('auth.login'))
+    is_icon = filename.lower().endswith(('.png', '.jpg', '.jpeg'))
+
+    if not is_icon:
+        host = request.host
+        if is_lan_access(host) and current_app.config.get('LAN_REQUIRE_LOGIN', False):
+            if not current_user.is_authenticated:
+                flash('请先登录')
+                return redirect(url_for('auth.login'))
 
     db = get_db()
     app_data = db.execute('SELECT id FROM apps WHERE filename = ?', (filename,)).fetchone()
@@ -272,7 +275,7 @@ def download(filename):
         db.execute('INSERT INTO download_logs (app_id, ip_address, user_agent) VALUES (?, ?, ?)',
                    (app_data['id'], request.remote_addr, request.headers.get('User-Agent', '')))
         db.commit()
-    return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
+    return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename, as_attachment=not is_icon)
 
 
 @main_bp.route('/cert')
