@@ -137,7 +137,7 @@
         <div class="info-row">
             <div class="info-label">文件大小</div>
             <div class="info-value">
-                {% if app.file_size %}
+                {% if app.file_size is number and app.file_size > 0 %}
                     {% if app.file_size > 1048576 %}
                         {{ "%.1f"|format(app.file_size / 1048576) }} MB
                     {% elif app.file_size > 1024 %}

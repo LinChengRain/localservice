@@ -104,6 +104,12 @@ def install(app_id):
         flash('应用不存在')
         return redirect(url_for('main.index'))
 
+    app_dict = dict(app_data)
+    try:
+        app_dict['file_size'] = int(app_dict.get('file_size', 0) or 0)
+    except (ValueError, TypeError):
+        app_dict['file_size'] = 0
+
     changelogs = db.execute(
         'SELECT * FROM changelogs WHERE app_id = ? ORDER BY created_at DESC',
         (app_id,)
@@ -120,7 +126,7 @@ def install(app_id):
     else:
         server_ip = host
 
-    return render_template('install.html', app=app_data, server_ip=server_ip,
+    return render_template('install.html', app=app_dict, server_ip=server_ip,
                          changelogs=changelogs, download_count=download_count)
 
 
