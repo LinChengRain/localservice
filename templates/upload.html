@@ -169,11 +169,18 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
                 var iconPath = null;
 
                 if (isHap) {
-                    // HAP: parse module.json to get icon reference
+                    // HAP: parse module.json/module.json5 to get icon reference
                     for (var i = 0; i < paths.length; i++) {
-                        if (paths[i].endsWith('module.json') && !paths[i].includes('resources')) {
+                        if ((paths[i].endsWith('module.json') || paths[i].endsWith('module.json5')) && !paths[i].includes('resources')) {
                             return zip.file(paths[i]).async('string').then(function(jsonStr) {
-                                var moduleData = JSON.parse(jsonStr);
+                                var moduleData;
+                                try {
+                                    moduleData = JSON.parse(jsonStr);
+                                } catch(e) {
+                                    // JSON5 fallback: strip comments and trailing commas
+                                    var cleaned = jsonStr.replace(/\/\/.*?$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/,(\s*[}\]])/g, '$1');
+                                    moduleData = JSON.parse(cleaned);
+                                }
                                 var iconRef = (moduleData.app && moduleData.app.icon) || (moduleData.module && moduleData.module.icon) || '';
                                 
                                 if (iconRef.startsWith('$media:')) {

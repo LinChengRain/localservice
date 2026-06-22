@@ -131,16 +131,29 @@ def extract_icon_from_hap(hap_path, output_dir, timestamp):
         import zipfile
         
         with zipfile.ZipFile(hap_path, 'r') as z:
-            # First try to find icon from module.json reference
+            # First try to find icon from module.json/module.json5 reference
             for name in z.namelist():
-                if name == 'module.json':
-                    data = json.loads(z.read(name))
+                if name in ('module.json', 'module.json5'):
+                    try:
+                        content = z.read(name).decode('utf-8')
+                        if name.endswith('.json5'):
+                            try:
+                                import json5
+                                data = json5.loads(content)
+                            except ImportError:
+                                import re
+                                content = re.sub(r'//.*?$', '', content, flags=re.MULTILINE)
+                                content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
+                                content = re.sub(r',\s*([\]}])', r'\1', content)
+                                data = json.loads(content)
+                        else:
+                            data = json.loads(content)
+                    except Exception:
+                        continue
                     icon_ref = data.get('app', {}).get('icon', '') or data.get('module', {}).get('icon', '')
                     
                     if icon_ref.startswith('$media:'):
-                        # Resolve media reference - look for the file directly
                         media_name = icon_ref.replace('$media:', '')
-                        # Try common locations
                         for path in [
                             f'resources/base/media/{media_name}.png',
                             f'resources/base/media/{media_name}.jpg',
@@ -281,21 +294,108 @@ def parse_apk_metadata(apk_path):
         print(f"Error parsing APK metadata: {e}")
     return None
 
+def _parse_resources_index(data):
+    """Parse binary resources.index file to extract string resources"""
+    results = {}
+    i = 0
+    while i < len(data) - 10:
+        if data[i] == 0x05:
+            if i + 2 < len(data):
+                length = data[i+1] | (data[i+2] << 8)
+                if 2 < length < 200:
+                    val_start = i + 3
+                    val_end = val_start + length - 1
+                    if val_end < len(data) and data[val_end] == 0x00:
+                        val_bytes = data[val_start:val_end]
+                        try:
+                            val = val_bytes.decode('utf-8')
+                            key_start = val_end + 1
+                            if key_start < len(data) and data[key_start] == 0x09:
+                                key_start += 1
+                                if key_start < len(data) and data[key_start] == 0x00:
+                                    key_start += 1
+                                    key_end = data.find(b'\x00', key_start)
+                                    if key_end > key_start and key_end - key_start < 100:
+                                        key = data[key_start:key_end].decode('utf-8')
+                                        results[key] = val
+                                        i = key_end
+                        except Exception:
+                            pass
+        i += 1
+    return results
+
+def _resolve_hap_string_ref(z, ref):
+    """Resolve $string:xxx reference from resources/index or string.json"""
+    if not ref.startswith('$string:'):
+        return ref
+    key = ref[len('$string:'):]
+    
+    # First try JSON string resources
+    string_paths = [
+        'resources/base/element/string.json',
+        'resources/base/element/en_US/element/string.json',
+        'resources/base/element/zh_CN/element/string.json',
+    ]
+    for sp in string_paths:
+        if sp in z.namelist():
+            try:
+                strings = json.loads(z.read(sp))
+                for item in strings.get('string', []):
+                    if item.get('name') == key:
+                        return item.get('value', '')
+            except Exception:
+                continue
+    
+    # Fallback: parse binary resources.index
+    if 'resources.index' in z.namelist():
+        try:
+            data = z.read('resources.index')
+            strings = _parse_resources_index(data)
+            if key in strings:
+                return strings[key]
+        except Exception:
+            pass
+    
+    return ''
+
 def parse_hap_metadata(hap_path):
-    """Parse module.json and pack.info from HAP file to get metadata"""
+    """Parse module.json/module.json5 and pack.info from HAP file to get metadata"""
     try:
         import zipfile
         
         with zipfile.ZipFile(hap_path, 'r') as z:
             pack_info = None
             module_data = None
+            module_key = None
             
-            # Single pass to find both files
-            for name in z.namelist():
+            # Collect file list for flexible lookup
+            namelist = z.namelist()
+            
+            # Single pass to find both files, support both .json and .json5
+            for name in namelist:
                 if name == 'pack.info':
-                    pack_info = json.loads(z.read(name))
-                elif name == 'module.json':
-                    module_data = json.loads(z.read(name))
+                    try:
+                        pack_info = json.loads(z.read(name))
+                    except Exception:
+                        pass
+                elif name in ('module.json', 'module.json5'):
+                    try:
+                        content = z.read(name).decode('utf-8')
+                        if name.endswith('.json5'):
+                            try:
+                                import json5
+                                module_data = json5.loads(content)
+                            except ImportError:
+                                import re
+                                content = re.sub(r'//.*?$', '', content, flags=re.MULTILINE)
+                                content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
+                                content = re.sub(r',\s*([\]}])', r'\1', content)
+                                module_data = json.loads(content)
+                        else:
+                            module_data = json.loads(content)
+                        module_key = name
+                    except Exception:
+                        pass
                 if pack_info and module_data:
                     break
             
@@ -304,18 +404,35 @@ def parse_hap_metadata(hap_path):
             
             app_info = module_data.get('app', {})
             
-            # Get app name - prefer non-localization reference
+            # Build a string resolver from the HAP resources
+            def resolve_ref(ref):
+                if not ref or not isinstance(ref, str):
+                    return ''
+                if ref.startswith('$string:'):
+                    return _resolve_hap_string_ref(z, ref)
+                return ref
+            
+            # Get app name from multiple sources with priority
             name = ''
             label = app_info.get('label', '')
-            if label and not label.startswith('$string:'):
-                name = label
+            resolved_label = resolve_ref(label)
+            if resolved_label:
+                name = resolved_label
+            
+            # Fallback: pack.info has the resolved label directly
+            if not name and pack_info:
+                pack_label = pack_info.get('summary', {}).get('app', {}).get('label', '')
+                if pack_label:
+                    name = pack_label
+            
+            # Fallback: bundleName
             if not name:
                 name = app_info.get('bundleName', '')
             
             # Get bundle ID
             bundle_id = app_info.get('bundleName', '')
             
-            # Get version - prefer pack.info for versionCode
+            # Get version
             version = app_info.get('versionName', '')
             build_number = ''
             
@@ -485,43 +602,35 @@ def upload():
 
             # Auto-increment build_number for same bundle_id + version
             db = get_db()
+            build_number = ''
             
-            # For HAP/APK files, try to get versionCode from metadata
+            # For HAP/APK files, try to get metadata from file
             if platform == 'harmonyos':
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 hap_meta = parse_hap_metadata(file_path)
-                if hap_meta and hap_meta.get('build_number'):
-                    build_number = hap_meta['build_number']
-                else:
-                    existing = db.execute(
-                        'SELECT build_number FROM apps WHERE bundle_id = ? AND version = ? ORDER BY CAST(build_number AS INTEGER) DESC LIMIT 1',
-                        (bundle_id, version)
-                    ).fetchone()
-                    if existing and existing['build_number']:
-                        try:
-                            build_number = str(int(existing['build_number']) + 1)
-                        except ValueError:
-                            build_number = '1'
-                    else:
-                        build_number = '1'
+                if hap_meta:
+                    if not name and hap_meta.get('name'):
+                        name = hap_meta['name']
+                    if not bundle_id and hap_meta.get('bundle_id'):
+                        bundle_id = hap_meta['bundle_id']
+                    if (not version or version == '1.0') and hap_meta.get('version'):
+                        version = hap_meta['version']
+                    if hap_meta.get('build_number'):
+                        build_number = hap_meta['build_number']
             elif platform == 'android':
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 apk_meta = parse_apk_metadata(file_path)
-                if apk_meta and apk_meta.get('build_number'):
-                    build_number = apk_meta['build_number']
-                else:
-                    existing = db.execute(
-                        'SELECT build_number FROM apps WHERE bundle_id = ? AND version = ? ORDER BY CAST(build_number AS INTEGER) DESC LIMIT 1',
-                        (bundle_id, version)
-                    ).fetchone()
-                    if existing and existing['build_number']:
-                        try:
-                            build_number = str(int(existing['build_number']) + 1)
-                        except ValueError:
-                            build_number = '1'
-                    else:
-                        build_number = '1'
-            else:
+                if apk_meta:
+                    if not name and apk_meta.get('name'):
+                        name = apk_meta['name']
+                    if not bundle_id and apk_meta.get('bundle_id'):
+                        bundle_id = apk_meta['bundle_id']
+                    if (not version or version == '1.0') and apk_meta.get('version'):
+                        version = apk_meta['version']
+                    if apk_meta.get('build_number'):
+                        build_number = apk_meta['build_number']
+            
+            if not build_number:
                 existing = db.execute(
                     'SELECT build_number FROM apps WHERE bundle_id = ? AND version = ? ORDER BY CAST(build_number AS INTEGER) DESC LIMIT 1',
                     (bundle_id, version)
