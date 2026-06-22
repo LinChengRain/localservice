@@ -20,7 +20,7 @@
         {% endif %}
     </div>
     {% if is_lan %}
-    <a href="{{ url_for('upload') }}" class="btn btn-primary">
+    <a href="{{ url_for('upload.upload') }}" class="btn btn-primary">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
         </svg>
@@ -31,10 +31,10 @@
 
 {% if client_platform == 'all' %}
 <div class="platform-filter">
-    <a href="{{ url_for('index') }}" class="platform-filter-btn {% if not request.args.get('platform') %}active{% endif %}">全部</a>
-    <a href="{{ url_for('index', platform='ios') }}" class="platform-filter-btn {% if request.args.get('platform') == 'ios' %}active{% endif %}">iOS</a>
-    <a href="{{ url_for('index', platform='harmonyos') }}" class="platform-filter-btn {% if request.args.get('platform') == 'harmonyos' %}active{% endif %}">Harmony</a>
-    <a href="{{ url_for('index', platform='android') }}" class="platform-filter-btn {% if request.args.get('platform') == 'android' %}active{% endif %}">Android</a>
+    <a href="{{ url_for('main.index') }}" class="platform-filter-btn {% if not request.args.get('platform') %}active{% endif %}">全部</a>
+    <a href="{{ url_for('main.index', platform='ios') }}" class="platform-filter-btn {% if request.args.get('platform') == 'ios' %}active{% endif %}">iOS</a>
+    <a href="{{ url_for('main.index', platform='harmonyos') }}" class="platform-filter-btn {% if request.args.get('platform') == 'harmonyos' %}active{% endif %}">Harmony</a>
+    <a href="{{ url_for('main.index', platform='android') }}" class="platform-filter-btn {% if request.args.get('platform') == 'android' %}active{% endif %}">Android</a>
 </div>
 {% endif %}
 
@@ -45,7 +45,7 @@
         <div class="app-group-header">
             <div class="app-group-icon">
                 {% if group.icon_filename %}
-                <img src="{{ url_for('download', filename=group.icon_filename) }}" alt="{{ group.name }}">
+                <img src="{{ url_for('main.download', filename=group.icon_filename) }}" alt="{{ group.name }}">
                 {% else %}
                 <div class="app-icon-placeholder">
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5">
@@ -96,7 +96,7 @@
                             {% endif %}
                         </div>
                         <div class="build-actions">
-                            <a href="{{ url_for('install', app_id=build.id) }}" class="btn-install-sm">
+                            <a href="{{ url_for('main.install', app_id=build.id) }}" class="btn-install-sm">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                                     <polyline points="7 10 12 15 17 10"/>
@@ -105,7 +105,8 @@
                                 安装
                             </a>
                             {% if is_lan %}
-                            <form action="{{ url_for('delete', app_id=build.id) }}" method="POST" class="delete-form">
+                            <form action="{{ url_for('admin.delete', app_id=build.id) }}" method="POST" class="delete-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn-delete-icon" onclick="return confirm('确定删除此构建？')">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <polyline points="3 6 5 6 21 6"/>
@@ -147,7 +148,7 @@
     <p>上传第一个企业应用开始分发</p>
     {% endif %}
     {% if is_lan %}
-    <a href="{{ url_for('upload') }}" class="btn btn-primary">上传应用</a>
+    <a href="{{ url_for('upload.upload') }}" class="btn btn-primary">上传应用</a>
     {% endif %}
 </div>
 {% endif %}

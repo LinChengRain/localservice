@@ -8,7 +8,7 @@
         <h1>上传应用</h1>
         <p class="subtitle">上传企业签名的 IPA、HAP 或 APK 文件</p>
     </div>
-    <a href="{{ url_for('index') }}" class="btn btn-ghost">
+    <a href="{{ url_for('main.index') }}" class="btn btn-ghost">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
         </svg>
@@ -17,7 +17,8 @@
 </div>
 
 <div class="upload-form">
-    <form action="{{ url_for('upload') }}" method="POST" enctype="multipart/form-data" id="uploadForm">
+    <form action="{{ url_for('upload.upload') }}" method="POST" enctype="multipart/form-data" id="uploadForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-group">
             <label for="ipa_file">安装包文件 *</label>
             <div class="file-input-wrapper">
@@ -72,12 +73,6 @@
             <label for="description">描述</label>
             <textarea id="description" name="description" rows="2" placeholder="可选：应用简介"></textarea>
         </div>
-<!-- 
-        <div class="form-group">
-            <label for="icon_file">应用图标</label>
-            <input type="file" id="icon_file" name="icon_file" accept=".png,.jpg,.jpeg">
-            <p class="help-text">已从 IPA 自动提取，也可手动覆盖</p>
-        </div> -->
 
         <input type="hidden" id="extracted_icon" name="extracted_icon" value="">
 
@@ -117,7 +112,6 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
     var isApk = file.name.toLowerCase().endsWith('.apk');
     var parseUrl = isApk ? '/api/parse-apk' : (isHap ? '/api/parse-hap' : '/api/parse-ipa');
 
-    // Update progress text
     var progressSteps = isApk ? ['正在上传文件...', '正在解析元数据...', '正在提取图标...', '解析完成'] : ['正在上传文件...', '正在解析...', '解析完成'];
     var stepIndex = 0;
     var progressTimer = setInterval(function() {
@@ -127,7 +121,6 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
         }
     }, 800);
 
-    // Parse metadata from server
     fetch(parseUrl, { method: 'POST', body: formData })
         .then(function(res) { return res.json(); })
         .then(function(result) {
@@ -138,7 +131,6 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
             document.getElementById('bundle_id').value = result.bundle_id || '';
             document.getElementById('version').value = result.version || '';
 
-            // Show icon if returned (APK only)
             if (result.icon) {
                 document.getElementById('iconImg').src = result.icon;
                 document.getElementById('iconPreview').style.display = 'flex';
@@ -154,12 +146,10 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
             alert('解析失败: ' + err.message);
         });
 
-    // APK: skip JSZip, icon will be extracted server-side after upload
     if (isApk) {
         return;
     }
 
-    // Extract icon from IPA/HAP using JSZip (in parallel with server parse)
     if (typeof JSZip !== 'undefined') {
         document.getElementById('loadingText').textContent = '正在提取图标...';
         var reader = new FileReader();
@@ -169,7 +159,6 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
                 var iconPath = null;
 
                 if (isHap) {
-                    // HAP: parse module.json/module.json5 to get icon reference
                     for (var i = 0; i < paths.length; i++) {
                         if ((paths[i].endsWith('module.json') || paths[i].endsWith('module.json5')) && !paths[i].includes('resources')) {
                             return zip.file(paths[i]).async('string').then(function(jsonStr) {
@@ -177,7 +166,6 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
                                 try {
                                     moduleData = JSON.parse(jsonStr);
                                 } catch(e) {
-                                    // JSON5 fallback: strip comments and trailing commas
                                     var cleaned = jsonStr.replace(/\/\/.*?$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/,(\s*[}\]])/g, '$1');
                                     moduleData = JSON.parse(cleaned);
                                 }
@@ -193,7 +181,6 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
                                     }
                                 }
                                 
-                                // Fallback: search for any icon in media directory
                                 if (!iconPath) {
                                     for (var j = 0; j < paths.length; j++) {
                                         if (paths[j].includes('media') && (paths[j].endsWith('.png') || paths[j].endsWith('.jpg'))) {
@@ -215,7 +202,6 @@ document.getElementById('ipa_file').addEventListener('change', function(e) {
                         }
                     }
                 } else {
-                    // IPA: search for AppIcon patterns
                     var iconPatterns = ['AppIcon60x60@2x.png', 'AppIcon60x60@3x.png', 'AppIcon-60@2x.png', 'AppIcon.png'];
                     for (var i = 0; i < iconPatterns.length; i++) {
                         for (var j = 0; j < paths.length; j++) {

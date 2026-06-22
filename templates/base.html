@@ -13,14 +13,14 @@
 <body>
     <nav class="navbar">
         <div class="nav-brand">
-            <a href="{{ url_for('index') }}">应用分发</a>
+            <a href="{{ url_for('main.index') }}">应用分发</a>
         </div>
         <div class="nav-links">
-            <a href="{{ url_for('index') }}">应用</a>
+            <a href="{{ url_for('main.index') }}">应用</a>
             {% if is_lan %}
-            <a href="{{ url_for('upload') }}">上传</a>
+            <a href="{{ url_for('upload.upload') }}">上传</a>
             {% endif %}
-            <a href="{{ url_for('download_cert') }}">证书</a>
+            <a href="{{ url_for('main.download_cert') }}">证书</a>
             <button class="btn-nav-icon" id="showQrBtn" title="显示二维码">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="2" y="2" width="8" height="8" rx="1"/>
