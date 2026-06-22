@@ -30,6 +30,19 @@
 </div>
 
 {% if client_platform == 'all' %}
+{% if stats %}
+<div class="stats-bar">
+    <div class="stat-item">
+        <span class="stat-number">{{ stats.total_apps }}</span>
+        <span class="stat-label">应用总数</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-number">{{ stats.total_downloads }}</span>
+        <span class="stat-label">总下载次数</span>
+    </div>
+</div>
+{% endif %}
+
 <div class="search-bar">
     <form action="{{ url_for('main.index') }}" method="GET">
         <input type="text" class="search-input" name="q" placeholder="搜索应用名称、Bundle ID..." value="{{ request.args.get('q', '') }}">
@@ -37,10 +50,10 @@
 </div>
 
 <div class="platform-filter">
-    <a href="{{ url_for('main.index') }}" class="platform-filter-btn {% if not request.args.get('platform') %}active{% endif %}">全部</a>
-    <a href="{{ url_for('main.index', platform='ios') }}" class="platform-filter-btn {% if request.args.get('platform') == 'ios' %}active{% endif %}">iOS</a>
-    <a href="{{ url_for('main.index', platform='harmonyos') }}" class="platform-filter-btn {% if request.args.get('platform') == 'harmonyos' %}active{% endif %}">Harmony</a>
-    <a href="{{ url_for('main.index', platform='android') }}" class="platform-filter-btn {% if request.args.get('platform') == 'android' %}active{% endif %}">Android</a>
+    <a href="{{ url_for('main.index', q=request.args.get('q', '')) }}" class="platform-filter-btn {% if not request.args.get('platform') %}active{% endif %}">全部</a>
+    <a href="{{ url_for('main.index', q=request.args.get('q', ''), platform='ios') }}" class="platform-filter-btn {% if request.args.get('platform') == 'ios' %}active{% endif %}">iOS</a>
+    <a href="{{ url_for('main.index', q=request.args.get('q', ''), platform='harmonyos') }}" class="platform-filter-btn {% if request.args.get('platform') == 'harmonyos' %}active{% endif %}">Harmony</a>
+    <a href="{{ url_for('main.index', q=request.args.get('q', ''), platform='android') }}" class="platform-filter-btn {% if request.args.get('platform') == 'android' %}active{% endif %}">Android</a>
 </div>
 {% endif %}
 
@@ -62,9 +75,9 @@
                 {% endif %}
             </div>
             <div class="app-group-info">
-                <h2 class="app-group-name">{{ group.name }}</h2>
+                <h2 class="app-group-name">{{ group.name|highlight(search_query) }}</h2>
                 <div class="app-group-meta">
-                    <span class="app-group-bundle">{{ group.bundle_id }}</span>
+                    <span class="app-group-bundle">{{ group.bundle_id|highlight(search_query) }}</span>
                     {% if group.platform == 'harmonyos' %}
                     <span class="platform-tag platform-harmonyos">Harmony</span>
                     {% elif group.platform == 'android' %}
@@ -79,18 +92,18 @@
         <div class="app-group-versions">
             {% for version, builds in group.versions.items() %}
             <div class="version-section">
-                <div class="version-header" onclick="toggleVersion(this)">
+                <div class="version-header" onclick="toggleVersion(this)" {% if loop.first %}data-expanded="true"{% endif %}>
                     <span class="version-tag">v{{ version }}</span>
                     {% if loop.first %}
                     <span class="latest-badge">最新</span>
                     {% endif %}
                     <span class="build-count">{{ builds|length }} 个构建</span>
-                    <svg class="version-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg class="version-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="{% if not loop.first %}transform: rotate(-90deg);{% endif %}">
                         <polyline points="6 9 12 15 18 9"/>
                     </svg>
                 </div>
                 
-                <div class="version-builds">
+                <div class="version-builds" style="{% if loop.first %}display: block;{% endif %}">
                     {% for build in builds %}
                     <div class="build-item">
                         <div class="build-info">
@@ -183,10 +196,10 @@ function toggleVersion(header) {
     
     if (builds.style.display === 'none' || builds.style.display === '') {
         builds.style.display = 'block';
-        chevron.style.transform = 'rotate(180deg)';
+        chevron.style.transform = 'rotate(0deg)';
     } else {
         builds.style.display = 'none';
-        chevron.style.transform = 'rotate(0deg)';
+        chevron.style.transform = 'rotate(-90deg)';
     }
 }
 </script>

@@ -125,7 +125,7 @@ def upload():
                     icon_path = os.path.join(current_app.config['UPLOAD_FOLDER'], icon_filename)
                     with open(icon_path, 'wb') as f:
                         f.write(icon_data)
-                except:
+                except (ValueError, IndexError):
                     pass
 
             if not icon_filename:

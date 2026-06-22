@@ -13,7 +13,7 @@ def require_api_key(f):
     def decorated(*args, **kwargs):
         api_key = current_app.config.get('API_KEY', '')
         if api_key:
-            provided_key = request.headers.get('X-API-Key', '') or request.args.get('api_key', '')
+            provided_key = request.headers.get('X-API-Key', '')
             if provided_key != api_key:
                 return jsonify({'error': 'Invalid API key'}), 401
         return f(*args, **kwargs)
@@ -99,7 +99,7 @@ def parse_ipa():
                         if plist.get('CFBundleIdentifier'):
                             main_plist = pf
                             break
-                    except:
+                    except (ValueError, KeyError):
                         continue
 
             if main_plist:

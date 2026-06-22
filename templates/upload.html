@@ -94,6 +94,14 @@
     </form>
 </div>
 
+<script>
+document.getElementById('uploadForm').addEventListener('submit', function() {
+    var btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = '上传中...';
+});
+</script>
+
 <div class="info-box">
     <h3>注意事项</h3>
     <ul>
@@ -105,7 +113,7 @@
     </ul>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" integrity="sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/uxy9rx7HNQlGYl1kPzQho1wx4JwY8wC" crossorigin="anonymous"></script>
 <script>
 var dropZone = document.getElementById('dropZone');
 var fileInput = document.getElementById('ipa_file');

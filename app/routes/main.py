@@ -71,11 +71,17 @@ def index():
     lan_ip = get_lan_ip()
     is_lan = is_lan_access(request.host)
 
+    stats = None
+    if is_lan:
+        total_apps = db.execute('SELECT COUNT(*) as cnt FROM apps').fetchone()['cnt']
+        total_downloads = db.execute('SELECT COUNT(*) as cnt FROM download_logs').fetchone()['cnt']
+        stats = {'total_apps': total_apps, 'total_downloads': total_downloads}
+
     return render_template('index.html', apps=apps, grouped_apps=grouped.values(),
                          server_ip=server_ip, is_lan=is_lan,
                          client_platform=platform,
                          page=page, total_pages=total_pages,
-                         search_query=search_query)
+                         search_query=search_query, stats=stats)
 
 
 @main_bp.route('/install/<int:app_id>')

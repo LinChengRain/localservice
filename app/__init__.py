@@ -1,6 +1,7 @@
 from flask import Flask, render_template
 from flask_login import LoginManager
 from flask_wtf.csrf import CSRFProtect
+from datetime import timedelta
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -30,6 +31,8 @@ def create_app(config_name=None):
         app.logger.info('应用分发平台启动')
 
     csrf = CSRFProtect(app)
+
+    app.permanent_session_lifetime = timedelta(seconds=app.config.get('PERMANENT_SESSION_LIFETIME', 7 * 24 * 3600))
 
     from app.models import init_db
     init_db(app)
@@ -69,6 +72,22 @@ def create_app(config_name=None):
     @app.errorhandler(500)
     def server_error(e):
         return render_template('500.html'), 500
+
+    @app.after_request
+    def set_security_headers(response):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        return response
+
+    @app.template_filter('highlight')
+    def highlight_filter(text, query):
+        if not query or not text:
+            return text
+        import re
+        pattern = re.compile(re.escape(query), re.IGNORECASE)
+        return pattern.sub(lambda m: f'<mark>{m.group()}</mark>', text)
 
     @app.context_processor
     def inject_globals():

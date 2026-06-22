@@ -40,7 +40,7 @@ def init_db(app):
         for col, default in [("build_number", "''"), ("build_type", "'release'"), ("platform", "'ios'")]:
             try:
                 db.execute(f"ALTER TABLE apps ADD COLUMN {col} TEXT DEFAULT {default}")
-            except:
+            except sqlite3.OperationalError:
                 pass
         db.execute('CREATE INDEX IF NOT EXISTS idx_apps_platform ON apps(platform)')
         db.execute('CREATE INDEX IF NOT EXISTS idx_apps_bundle_id ON apps(bundle_id)')
@@ -93,8 +93,14 @@ def init_db(app):
 
 
 def _ensure_admin_user(db, username, password):
-    existing = db.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
-    if not existing:
+    from werkzeug.security import check_password_hash
+    existing = db.execute('SELECT id, password_hash FROM users WHERE username = ?', (username,)).fetchone()
+    if existing:
+        if not check_password_hash(existing['password_hash'], password):
+            password_hash = generate_password_hash(password, method='pbkdf2:sha256')
+            db.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash, existing['id']))
+            db.commit()
+    else:
         password_hash = generate_password_hash(password, method='pbkdf2:sha256')
         db.execute('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
                    (username, password_hash, 'admin'))

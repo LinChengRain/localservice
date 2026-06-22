@@ -21,7 +21,7 @@ def get_lan_ip():
     try:
         s.connect(('8.8.8.8', 80))
         _cached_lan_ip = s.getsockname()[0]
-    except:
+    except (IOError, OSError):
         _cached_lan_ip = '127.0.0.1'
     finally:
         s.close()
@@ -140,12 +140,12 @@ def extract_icon_from_ipa(ipa_path, output_dir, timestamp):
                         with open(os.path.join(output_dir, icon_filename), 'wb') as f:
                             f.write(icon_data)
                         return icon_filename
-                except:
+                except (IOError, OSError):
                     continue
 
         return None
     except Exception as e:
-        print(f"Error extracting icon: {e}")
+        current_app.logger.error(f"Error extracting icon: {e}")
         return None
 
 
@@ -213,7 +213,7 @@ def extract_icon_from_hap(hap_path, output_dir, timestamp):
                                 f.write(icon_data)
                             return icon_filename
     except Exception as e:
-        print(f"Error extracting HAP icon: {e}")
+        current_app.logger.error(f"Error extracting HAP icon: {e}")
     return None
 
 
@@ -286,7 +286,7 @@ def extract_icon_from_apk(apk_path, output_dir, timestamp):
                     continue
 
     except Exception as e:
-        print(f"Error extracting APK icon: {e}")
+        current_app.logger.error(f"Error extracting APK icon: {e}")
     return None
 
 
@@ -301,7 +301,7 @@ def parse_apk_metadata(apk_path):
             'build_number': str(a.get_androidversion_code() or ''),
         }
     except Exception as e:
-        print(f"Error parsing APK metadata: {e}")
+        current_app.logger.error(f"Error parsing APK metadata: {e}")
     return None
 
 
@@ -449,7 +449,7 @@ def parse_hap_metadata(hap_path):
                 'icon_ref': icon_ref,
             }
     except Exception as e:
-        print(f"Error parsing HAP metadata: {e}")
+        current_app.logger.error(f"Error parsing HAP metadata: {e}")
     return None
 
 

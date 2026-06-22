@@ -1,8 +1,7 @@
-from flask import render_template, request, redirect, url_for, flash
+from flask import render_template, request, redirect, url_for, flash, current_app
 from flask_login import login_user, logout_user, login_required
 from app.routes import auth_bp
 from app.models import User, get_db
-from app.utils import is_lan_access
 import time
 
 
@@ -13,6 +12,9 @@ def login():
         password = request.form.get('password', '')
 
         db = get_db()
+
+        max_attempts = current_app.config.get('MAX_LOGIN_ATTEMPTS', 5)
+        lockout_seconds = current_app.config.get('LOGIN_LOCKOUT_SECONDS', 300)
 
         failed_row = db.execute(
             'SELECT attempts, locked_until FROM login_attempts WHERE username = ?',
@@ -44,13 +46,13 @@ def login():
         else:
             attempts = 1
 
-        if attempts >= 5:
-            locked_until = time.time() + 300
+        if attempts >= max_attempts:
+            locked_until = time.time() + lockout_seconds
             db.execute(
                 'INSERT OR REPLACE INTO login_attempts (username, attempts, locked_until) VALUES (?, ?, ?)',
                 (username, attempts, locked_until)
             )
-            flash('登录失败次数过多，账户已锁定 5 分钟')
+            flash(f'登录失败次数过多，账户已锁定 {lockout_seconds // 60} 分钟')
         else:
             db.execute(
                 'INSERT OR REPLACE INTO login_attempts (username, attempts, locked_until) VALUES (?, ?, NULL)',

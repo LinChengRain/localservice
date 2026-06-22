@@ -22,6 +22,10 @@ class Config:
     ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
     ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'changeme')
     API_KEY = os.getenv('API_KEY', '')
+    PERMANENT_SESSION_LIFETIME = int(os.getenv('PERMANENT_SESSION_LIFETIME', 7 * 24 * 3600))
+    MAX_LOGIN_ATTEMPTS = int(os.getenv('MAX_LOGIN_ATTEMPTS', 5))
+    LOGIN_LOCKOUT_SECONDS = int(os.getenv('LOGIN_LOCKOUT_SECONDS', 300))
+    PER_PAGE = int(os.getenv('PER_PAGE', 20))
 
 
 class TestingConfig(Config):
