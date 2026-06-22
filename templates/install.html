@@ -135,6 +135,22 @@
             <div class="info-value">{{ app.upload_time }}</div>
         </div>
         <div class="info-row">
+            <div class="info-label">文件大小</div>
+            <div class="info-value">
+                {% if app.file_size %}
+                    {% if app.file_size > 1048576 %}
+                        {{ "%.1f"|format(app.file_size / 1048576) }} MB
+                    {% elif app.file_size > 1024 %}
+                        {{ "%.1f"|format(app.file_size / 1024) }} KB
+                    {% else %}
+                        {{ app.file_size }} B
+                    {% endif %}
+                {% else %}
+                    未知
+                {% endif %}
+            </div>
+        </div>
+        <div class="info-row">
             <div class="info-label">下载次数</div>
             <div class="info-value">{{ download_count }}</div>
         </div>

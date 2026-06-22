@@ -34,10 +34,11 @@ def init_db(app):
                 description TEXT,
                 build_number TEXT DEFAULT '',
                 build_type TEXT DEFAULT 'release',
-                platform TEXT DEFAULT 'ios'
+                platform TEXT DEFAULT 'ios',
+                file_size INTEGER DEFAULT 0
             )
         ''')
-        for col, default in [("build_number", "''"), ("build_type", "'release'"), ("platform", "'ios'")]:
+        for col, default in [("build_number", "''"), ("build_type", "'release'"), ("platform", "'ios'"), ("file_size", "0")]:
             try:
                 db.execute(f"ALTER TABLE apps ADD COLUMN {col} TEXT DEFAULT {default}")
             except sqlite3.OperationalError:

@@ -53,6 +53,7 @@ def upload():
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_')
             filename = timestamp + filename
             file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
+            file_size = os.path.getsize(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
 
             if filename.lower().endswith('.hap'):
                 platform = 'harmonyos'
@@ -138,8 +139,8 @@ def upload():
                     icon_filename = extract_icon_from_ipa(file_path, current_app.config['UPLOAD_FOLDER'], timestamp)
 
             db.execute(
-                'INSERT INTO apps (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform, upload_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                'INSERT INTO apps (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform, upload_time, file_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), file_size)
             )
             db.commit()
 
