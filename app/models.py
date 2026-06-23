@@ -9,6 +9,7 @@ def get_db():
     if 'db' not in g:
         g.db = sqlite3.connect(current_app.config['DATABASE'])
         g.db.row_factory = sqlite3.Row
+        g.db.execute('PRAGMA foreign_keys = ON')
     return g.db
 
 
@@ -38,7 +39,7 @@ def init_db(app):
                 file_size INTEGER DEFAULT 0
             )
         ''')
-        for col, default in [("build_number", "''"), ("build_type", "'release'"), ("platform", "'ios'"), ("file_size", "0")]:
+        for col, default in [("build_number", "''"), ("build_type", "'release'"), ("platform", "'ios'"), ("file_size", "0"), ("file_hash", "''")]:
             try:
                 db.execute(f"ALTER TABLE apps ADD COLUMN {col} TEXT DEFAULT {default}")
             except sqlite3.OperationalError:
@@ -86,6 +87,20 @@ def init_db(app):
             )
         ''')
 
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action TEXT NOT NULL,
+                target_id INTEGER,
+                detail TEXT,
+                operator TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        db.execute('DELETE FROM changelogs WHERE app_id NOT IN (SELECT id FROM apps)')
+        db.execute('DELETE FROM download_logs WHERE app_id NOT IN (SELECT id FROM apps)')
+
         db.commit()
 
         _ensure_admin_user(db, app.config.get('ADMIN_USERNAME', 'admin'),
@@ -106,6 +121,15 @@ def _ensure_admin_user(db, username, password):
         db.execute('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
                    (username, password_hash, 'admin'))
         db.commit()
+
+
+def cleanup_old_logs(days=90):
+    db = get_db()
+    db.execute(
+        'DELETE FROM download_logs WHERE downloaded_at < datetime("now", ?)',
+        (f'-{days} days',)
+    )
+    db.commit()
 
 
 class User(UserMixin):

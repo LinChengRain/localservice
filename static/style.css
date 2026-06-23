@@ -1878,3 +1878,40 @@ mark {
 .file-input-wrapper.drag-over {
     transform: scale(1.02);
 }
+
+/* Batch actions */
+.batch-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--card-bg);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+}
+
+.batch-actions span {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* Build checkbox */
+.build-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 8px;
+}
+
+.build-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--primary);
+}
+
+.build-item {
+    display: flex;
+    align-items: flex-start;
+}

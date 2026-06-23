@@ -309,29 +309,62 @@ def _parse_resources_index(data):
     results = {}
     i = 0
     while i < len(data) - 10:
-        if data[i] == 0x05:
-            if i + 2 < len(data):
-                length = data[i+1] | (data[i+2] << 8)
-                if 2 < length < 200:
-                    val_start = i + 3
-                    val_end = val_start + length - 1
-                    if val_end < len(data) and data[val_end] == 0x00:
-                        val_bytes = data[val_start:val_end]
-                        try:
-                            val = val_bytes.decode('utf-8')
-                            key_start = val_end + 1
-                            if key_start < len(data) and data[key_start] == 0x09:
+        if data[i] in (0x02, 0x05) and i + 2 < len(data):
+            length = data[i+1] | (data[i+2] << 8)
+            if 2 < length < 200:
+                val_start = i + 3
+                val_end = val_start + length - 1
+                if val_end < len(data) and data[val_end] == 0x00:
+                    val_bytes = data[val_start:val_end]
+                    try:
+                        val = val_bytes.decode('utf-8')
+                        key_start = val_end + 1
+                        if key_start < len(data) and data[key_start] == 0x09:
+                            key_start += 1
+                            if key_start < len(data) and data[key_start] == 0x00:
                                 key_start += 1
-                                if key_start < len(data) and data[key_start] == 0x00:
-                                    key_start += 1
-                                    key_end = data.find(b'\x00', key_start)
-                                    if key_end > key_start and key_end - key_start < 100:
-                                        key = data[key_start:key_end].decode('utf-8')
-                                        results[key] = val
-                                        i = key_end
-                        except Exception:
-                            pass
+                                key_end = data.find(b'\x00', key_start)
+                                if key_end > key_start and key_end - key_start < 100:
+                                    key = data[key_start:key_end].decode('utf-8')
+                                    results[key] = val
+                                    i = key_end
+                    except Exception:
+                        pass
         i += 1
+
+    if not results:
+        results = _scan_resources_index_strings(data)
+
+    return results
+
+
+def _scan_resources_index_strings(data):
+    strings = []
+    i = 0
+    while i < len(data):
+        if 0x20 <= data[i] < 0x7f:
+            start = i
+            while i < len(data) and 0x20 <= data[i] < 0x7f:
+                i += 1
+            s = data[start:i].decode('ascii')
+            if len(s) >= 2:
+                strings.append((start, s))
+        i += 1
+
+    key_candidates = {}
+    for offset, s in strings:
+        if '_' in s or s.islower():
+            key_candidates[offset] = s
+
+    results = {}
+    for idx, (key_offset, key) in enumerate(key_candidates.items()):
+        for val_offset, val in strings:
+            if val_offset != key_offset and val not in key_candidates.values():
+                if abs(val_offset - key_offset) < 100:
+                    if val.isprintable() and not val.startswith('0x') and len(val) >= 2:
+                        results[key] = val
+                        break
+
     return results
 
 

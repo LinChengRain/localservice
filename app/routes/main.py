@@ -36,7 +36,7 @@ def index():
         query += ' WHERE ' + ' AND '.join(conditions)
 
     page = request.args.get('page', 1, type=int)
-    per_page = 20
+    per_page = current_app.config.get('PER_PAGE', 20)
     offset = (page - 1) * per_page
 
     count_query = 'SELECT COUNT(*) as cnt FROM apps'
@@ -198,6 +198,12 @@ def manifest_harmony(app_id):
     deploy_domain = f'https://{server_ip}'
     hap_path = os.path.join(current_app.config['UPLOAD_FOLDER'], app_data['filename'])
 
+    file_hash = app_data['file_hash'] if app_data['file_hash'] else ''
+    if not file_hash and os.path.exists(hap_path):
+        file_hash = file_sha256(hap_path)
+        db.execute('UPDATE apps SET file_hash = ? WHERE id = ?', (file_hash, app_id))
+        db.commit()
+
     manifest_data = {
         'app': {
             'bundleName': app_data['bundle_id'],
@@ -217,7 +223,7 @@ def manifest_harmony(app_id):
                 'type': 'entry',
                 'deviceTypes': ['phone', 'tablet'],
                 'packageUrl': f'{deploy_domain}/download/{app_data["filename"]}',
-                'packageHash': file_sha256(hap_path) if os.path.exists(hap_path) else '',
+                'packageHash': file_hash,
             }]
         }
     }
@@ -248,6 +254,12 @@ def manifest_harmony_json5(app_id):
     deploy_domain = f'https://{server_ip}'
     hap_path = os.path.join(current_app.config['UPLOAD_FOLDER'], app_data['filename'])
 
+    file_hash = app_data['file_hash'] if app_data['file_hash'] else ''
+    if not file_hash and os.path.exists(hap_path):
+        file_hash = file_sha256(hap_path)
+        db.execute('UPDATE apps SET file_hash = ? WHERE id = ?', (file_hash, app_id))
+        db.commit()
+
     manifest_data = {
         'app': {
             'bundleName': app_data['bundle_id'],
@@ -267,7 +279,7 @@ def manifest_harmony_json5(app_id):
                 'type': 'entry',
                 'deviceTypes': ['phone'],
                 'packageUrl': f'{deploy_domain}/download/{app_data["filename"]}',
-                'packageHash': file_sha256(hap_path) if os.path.exists(hap_path) else '',
+                'packageHash': file_hash,
             }]
         }
     }

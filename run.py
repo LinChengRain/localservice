@@ -34,7 +34,8 @@ def main():
         app.run(host=args.host, port=args.http_port)
     else:
         cert_cn = server_ip.split(':')[0] if ':' in server_ip else server_ip
-        cert_path, key_path = generate_certificates(cert_cn)
+        with app.app_context():
+            cert_path, key_path = generate_certificates(cert_cn)
 
         print(f"应用分发服务启动中...")
         print(f"服务器地址: https://{server_ip}:{args.port}")

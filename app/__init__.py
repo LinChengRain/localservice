@@ -1,6 +1,8 @@
 from flask import Flask, render_template
 from flask_login import LoginManager
 from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from datetime import timedelta
 import logging
 from logging.handlers import RotatingFileHandler
@@ -32,10 +34,21 @@ def create_app(config_name=None):
 
     csrf = CSRFProtect(app)
 
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=["200 per minute"],
+        storage_uri="memory://",
+    )
+    app.limiter = limiter
+
     app.permanent_session_lifetime = timedelta(seconds=app.config.get('PERMANENT_SESSION_LIFETIME', 7 * 24 * 3600))
 
     from app.models import init_db
     init_db(app)
+
+    if app.config.get('ADMIN_PASSWORD', 'changeme') == 'changeme':
+        app.logger.warning('WARNING: 使用默认管理员密码，请尽快修改 ADMIN_PASSWORD 环境变量')
 
     login_manager = LoginManager()
     login_manager.init_app(app)
@@ -79,6 +92,7 @@ def create_app(config_name=None):
         response.headers['X-Frame-Options'] = 'SAMEORIGIN'
         response.headers['X-XSS-Protection'] = '1; mode=block'
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:"
         return response
 
     @app.template_filter('highlight')

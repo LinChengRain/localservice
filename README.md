@@ -12,21 +12,27 @@
 - ✅ **版本分组**：按应用分组显示，版本按版本号从高到低排序
 - ✅ **构建管理**：构建号自动累加，区分同一版本的不同构建
 - ✅ **搜索功能**：支持按名称、Bundle ID、描述搜索，搜索结果高亮
-- ✅ **分页显示**：应用列表支持分页浏览
+- ✅ **分页显示**：应用列表支持分页浏览，分页大小可配置
 - ✅ **Changelog**：上传时填写更新日志，安装页展示版本历史
 - ✅ **应用编辑**：支持修改应用名称、描述、包类型
 - ✅ **下载统计**：记录并展示应用下载次数
 - ✅ **统计概览**：首页显示应用总数和总下载次数
 - ✅ **文件大小**：安装页显示安装包大小（自动格式化 B/KB/MB）
+- ✅ **文件完整性**：上传时计算 SHA256 哈希，支持文件校验
+- ✅ **批量删除**：支持多选应用批量删除，关联数据自动清理
+- ✅ **日志清理**：支持清理过期下载日志，保持数据库轻量
 
 ### 安全特性
 - ✅ **访问控制**：公网只读，内网可配置登录
 - ✅ **CSRF 防护**：Flask-WTF 表单保护
 - ✅ **登录认证**：Flask-Login + 密码哈希存储
 - ✅ **暴力破解防护**：连续登录失败锁定（可配置次数和时间）
-- ✅ **安全响应头**：X-Frame-Options、X-Content-Type-Options 等
+- ✅ **安全响应头**：Content-Security-Policy、X-Frame-Options、X-Content-Type-Options 等
 - ✅ **Session 超时**：可配置会话有效期
 - ✅ **文件类型校验**：上传文件魔数校验
+- ✅ **审计日志**：记录编辑、删除、上传等管理操作
+- ✅ **密码安全提醒**：启动时检测默认密码并输出警告
+- ✅ **外键约束**：SQLite 启用外键约束，防止孤立数据
 
 ### 用户体验
 - ✅ **拖拽上传**：支持拖拽文件到上传区域
@@ -36,6 +42,7 @@
 - ✅ **自动展开**：首页自动展开最新版本的构建列表
 - ✅ **自定义错误页**：404、413、500 错误页面
 - ✅ **暗色模式**：跟随系统主题自动切换
+- ✅ **CDN 本地化**：JS 库本地部署，离线环境可用
 
 ### 平台特性
 - ✅ **包类型选择**：支持正式版、准生产、测试版、调试版
@@ -49,6 +56,10 @@
 - ✅ **Android**：直接下载 APK 安装
 - ✅ **公网访问**：支持 Cloudflared 隧道实现公网分发
 - ✅ **QR 码**：安装页面自动生成扫码安装二维码
+
+### 测试
+- ✅ **pytest 框架**：完整的单元测试覆盖
+- ✅ **测试配置**：使用内存数据库，不影响生产数据
 
 ## 快速开始
 
@@ -210,7 +221,7 @@ localservice/
 │       ├── main.py         # 首页、安装页、下载
 │       ├── auth.py         # 登录认证
 │       ├── upload.py       # 上传功能
-│       ├── admin.py        # 管理功能（编辑、备份）
+│       ├── admin.py        # 管理功能（编辑、删除、备份、批量操作）
 │       └── api.py          # JSON API 接口
 ├── templates/              # HTML 模板
 │   ├── base.html           # 基础模板
@@ -223,13 +234,23 @@ localservice/
 │   ├── 413.html            # 413 错误页面
 │   └── 500.html            # 500 错误页面
 ├── static/                 # 静态文件
-│   └── style.css           # 样式文件
+│   ├── style.css           # 样式文件
+│   └── vendor/             # 本地化 JS 库
+│       ├── qrcode.min.js   # QR 码生成
+│       └── jszip.min.js    # ZIP 文件处理
+├── tests/                  # 测试用例
+│   ├── conftest.py         # 测试配置
+│   ├── test_main.py        # 主页测试
+│   ├── test_auth.py        # 认证测试
+│   ├── test_upload.py      # 上传测试
+│   ├── test_admin.py       # 管理测试
+│   └── test_api.py         # API 测试
 ├── run.py                  # 开发启动入口
 ├── wsgi.py                 # Gunicorn 生产入口
 ├── requirements.txt        # Python 依赖
 ├── .env.example            # 环境变量示例
 ├── .dockerignore           # Docker 排除文件
-├── Dockerfile              # Docker 镜像
+├── Dockerfile              # Docker 镜像（多阶段构建）
 ├── docker-compose.yml      # Docker Compose 配置
 ├── start.sh                # 一键启动脚本
 ├── uploads/                # 应用文件上传目录
@@ -248,6 +269,7 @@ localservice/
 | `/install/<id>` | GET | 安装页面 |
 | `/edit/<id>` | GET/POST | 编辑应用信息（需内网） |
 | `/manifest/<id>` | GET | iOS manifest.plist |
+| `/manifest-harmony/<id>` | GET | 鸿蒙 manifest JSON |
 | `/manifest-harmony/<id>.json5` | GET | 鸿蒙 manifest JSON5 |
 | `/download/<filename>` | GET | 下载文件（图标无需登录） |
 | `/cert` | GET | 下载证书 |
@@ -255,7 +277,9 @@ localservice/
 | `/auth/login` | GET/POST | 登录页面（公网可达） |
 | `/auth/logout` | GET | 退出登录 |
 | `/admin/backup` | GET | 下载数据库备份（需登录） |
-| `/api/apps` | GET | 应用列表（JSON） |
+| `/admin/batch-delete` | POST | 批量删除应用（需登录） |
+| `/admin/cleanup-logs` | POST | 清理过期下载日志（需登录） |
+| `/api/apps` | GET | 应用列表（JSON，支持分页） |
 | `/api/apps/grouped` | GET | 分组应用列表（JSON） |
 | `/api/parse-ipa` | POST | 解析 IPA 文件元数据 |
 | `/api/parse-hap` | POST | 解析 HAP 文件元数据 |
@@ -276,7 +300,9 @@ CREATE TABLE apps (
     description TEXT,                    -- 描述
     build_number TEXT DEFAULT '',        -- 构建号
     build_type TEXT DEFAULT 'release',   -- 包类型
-    platform TEXT DEFAULT 'ios'          -- 平台（ios/harmonyos/android）
+    platform TEXT DEFAULT 'ios',         -- 平台（ios/harmonyos/android）
+    file_size INTEGER DEFAULT 0,         -- 文件大小（字节）
+    file_hash TEXT DEFAULT ''            -- 文件 SHA256 哈希
 );
 
 -- 用户表
@@ -294,7 +320,8 @@ CREATE TABLE download_logs (
     app_id INTEGER NOT NULL,             -- 应用ID
     ip_address TEXT,                     -- 下载者IP
     user_agent TEXT,                     -- 浏览器信息
-    downloaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    downloaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (app_id) REFERENCES apps(id)
 );
 
 -- 更新日志表
@@ -303,7 +330,8 @@ CREATE TABLE changelogs (
     app_id INTEGER NOT NULL,             -- 应用ID
     version TEXT NOT NULL,               -- 版本号
     content TEXT,                        -- 更新内容
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (app_id) REFERENCES apps(id)
 );
 
 -- 登录尝试记录表
@@ -311,6 +339,16 @@ CREATE TABLE login_attempts (
     username TEXT PRIMARY KEY,           -- 用户名
     attempts INTEGER DEFAULT 0,          -- 失败次数
     locked_until REAL                    -- 锁定截止时间
+);
+
+-- 审计日志表
+CREATE TABLE audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,                -- 操作类型
+    target_id INTEGER,                   -- 目标ID
+    detail TEXT,                         -- 操作详情
+    operator TEXT,                       -- 操作者
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
@@ -328,11 +366,27 @@ CREATE TABLE login_attempts (
 docker-compose up -d
 ```
 
+Docker 部署特性：
+- 多阶段构建，减小镜像体积
+- 非 root 用户运行，提升安全性
+- 环境变量配置，无需修改代码
+- 健康检查，自动重启
+
 ### 方式三：Gunicorn 生产部署
 
 ```bash
 gunicorn wsgi:app -b 0.0.0.0:8080 --workers 4
 ```
+
+## 测试
+
+运行测试：
+
+```bash
+pytest tests/ -v
+```
+
+测试使用内存数据库，不影响生产数据。
 
 ## 注意事项
 
@@ -347,6 +401,7 @@ gunicorn wsgi:app -b 0.0.0.0:8080 --workers 4
 2. manifest URL 必须以 `.json5` 结尾
 3. `deployDomain` 必须与 manifest URL 域名一致
 4. DeepLink URL 需要 `encodeURIComponent` 编码
+5. 支持多种 `resources.index` 二进制格式
 
 ### Android 应用
 1. APK 需确保已签名
@@ -397,13 +452,17 @@ A: 修改 `.env` 文件中的 `ADMIN_PASSWORD`，重启服务后自动生效。
 ### Q: 如何备份数据库？
 A: 登录后访问 `/admin/backup` 下载数据库备份文件。
 
+### Q: 如何清理旧的下载日志？
+A: 登录后调用 `/admin/cleanup-logs` 接口，或使用管理界面的日志清理功能。
+
 ## 技术栈
 
-- **后端**：Python 3、Flask、SQLite、Flask-Login、Flask-WTF
+- **后端**：Python 3、Flask、SQLite、Flask-Login、Flask-WTF、Flask-Limiter
 - **前端**：HTML5、CSS3、JavaScript
 - **工具**：OpenSSL（自签名证书）、Cloudflared（公网隧道）
 - **解析**：plistlib（IPA）、zipfile + json5（HAP）、androguard（APK）
-- **部署**：Gunicorn、Docker
+- **部署**：Gunicorn、Docker（多阶段构建）
+- **测试**：pytest
 
 ## 许可证
 

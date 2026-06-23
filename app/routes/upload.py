@@ -6,7 +6,7 @@ from app.routes import upload_bp
 from app.models import get_db
 from app.utils import (admin_required, extract_icon_from_ipa, extract_icon_from_hap,
                        extract_icon_from_apk, parse_apk_metadata, parse_hap_metadata,
-                       get_server_ip, is_lan_access)
+                       get_server_ip, is_lan_access, file_sha256)
 
 ALLOWED_EXTENSIONS = {'ipa', 'hap', 'apk', 'png', 'jpg', 'jpeg'}
 
@@ -138,9 +138,12 @@ def upload():
                 else:
                     icon_filename = extract_icon_from_ipa(file_path, current_app.config['UPLOAD_FOLDER'], timestamp)
 
+            file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+            file_hash = file_sha256(file_path)
+
             db.execute(
-                'INSERT INTO apps (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform, upload_time, file_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), file_size)
+                'INSERT INTO apps (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform, upload_time, file_size, file_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (name, bundle_id, version, filename, icon_filename, description, build_number, build_type, platform, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), file_size, file_hash)
             )
             db.commit()
 
@@ -152,6 +155,10 @@ def upload():
                     (app_id, version, changelog, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 )
                 db.commit()
+
+            from app.routes.admin import log_audit
+            app_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            log_audit('upload_app', app_id, f'bundle_id={bundle_id}, version={version}')
 
             flash('应用上传成功')
             return redirect(url_for('main.index'))

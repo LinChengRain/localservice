@@ -59,6 +59,21 @@
 
 {% if grouped_apps %}
 <div class="apps-grouped">
+    {% if is_lan %}
+    <div class="batch-actions" id="batchActions" style="display: none;">
+        <form action="{{ url_for('admin.batch_delete') }}" method="POST" id="batchDeleteForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <span id="selectedCount">0</span> 个构建已选择
+            <button type="submit" class="btn btn-danger" onclick="return confirm('确定删除选中的构建？')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+                批量删除
+            </button>
+        </form>
+    </div>
+    {% endif %}
     {% for group in grouped_apps %}
     <div class="app-group">
         <div class="app-group-header">
@@ -106,6 +121,11 @@
                 <div class="version-builds" style="{% if loop.first %}display: block;{% endif %}">
                     {% for build in builds %}
                     <div class="build-item">
+                        {% if is_lan %}
+                        <label class="build-checkbox">
+                            <input type="checkbox" name="app_ids[]" value="{{ build.id }}" onchange="updateBatchActions()">
+                        </label>
+                        {% endif %}
                         <div class="build-info">
                             <div class="build-meta-row">
                                 <span class="build-number">构建 #{{ build.build_number }}</span>
@@ -200,6 +220,20 @@ function toggleVersion(header) {
     } else {
         builds.style.display = 'none';
         chevron.style.transform = 'rotate(-90deg)';
+    }
+}
+
+function updateBatchActions() {
+    var checkboxes = document.querySelectorAll('input[name="app_ids[]"]');
+    var checked = 0;
+    checkboxes.forEach(function(cb) {
+        if (cb.checked) checked++;
+    });
+    var batchActions = document.getElementById('batchActions');
+    var countEl = document.getElementById('selectedCount');
+    if (batchActions) {
+        batchActions.style.display = checked > 0 ? 'flex' : 'none';
+        countEl.textContent = checked;
     }
 }
 </script>

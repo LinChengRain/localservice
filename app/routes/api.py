@@ -24,8 +24,22 @@ def require_api_key(f):
 @require_api_key
 def api_apps():
     db = get_db()
-    apps = db.execute('SELECT * FROM apps ORDER BY upload_time DESC').fetchall()
-    return jsonify([dict(app) for app in apps])
+    page = request.args.get('page', type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
+    if page is not None:
+        offset = (page - 1) * per_page
+        total = db.execute('SELECT COUNT(*) as cnt FROM apps').fetchone()['cnt']
+        apps = db.execute('SELECT * FROM apps ORDER BY upload_time DESC LIMIT ? OFFSET ?', (per_page, offset)).fetchall()
+        return jsonify({
+            'items': [dict(app) for app in apps],
+            'total': total,
+            'page': page,
+            'per_page': per_page
+        })
+    else:
+        apps = db.execute('SELECT * FROM apps ORDER BY upload_time DESC').fetchall()
+        return jsonify([dict(app) for app in apps])
 
 
 @api_bp.route('/apps/grouped')

@@ -18,3 +18,5 @@ Thumbs.db
 start.sh
 tunnel.sh
 DISTRIBUTION.md
+tests/
+README.md

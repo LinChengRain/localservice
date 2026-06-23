@@ -305,7 +305,7 @@
     {% endif %}
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="/static/vendor/qrcode.min.js"></script>
 <script>
     {% if app.platform == 'harmonyos' %}
     var harmony_manifest_url = "https://{{ server_ip }}/manifest-harmony/{{ app.id }}.json5";
