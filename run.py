@@ -8,7 +8,7 @@ def main():
     parser = argparse.ArgumentParser(description='应用分发服务')
     parser.add_argument('--host', default='0.0.0.0', help='监听地址')
     parser.add_argument('--port', type=int, default=8443, help='HTTPS端口')
-    parser.add_argument('--http-port', type=int, default=8080, help='HTTP端口（用于ngrok）')
+    parser.add_argument('--http-port', type=int, default=8808, help='HTTP端口（用于ngrok）')
     parser.add_argument('--server', default=None, help='公网服务器地址（用于ngrok等场景）')
     parser.add_argument('--ngrok', action='store_true', help='ngrok模式：只启动HTTP，不启动HTTPS')
     args = parser.parse_args()

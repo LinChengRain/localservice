@@ -78,15 +78,16 @@ pip3 install -r requirements.txt
 脚本会自动：
 - 停止已有服务
 - 安装依赖
-- 启动 Flask 本地服务（端口 8080）
+- 启动 Flask 本地服务（端口 8808）
 - 启动 Cloudflared 公网隧道
+- 健康检查验证
 - 显示访问地址
 
 ### 3. 访问管理界面
 
 启动后访问：
-- 本地访问：http://127.0.0.1:8080
-- 局域网访问：http://你的IP:8080
+- 本地访问：http://127.0.0.1:8808
+- 局域网访问：http://你的IP:8808
 - 公网访问：脚本输出的 Cloudflared URL
 
 ## 配置说明
@@ -375,7 +376,7 @@ Docker 部署特性：
 ### 方式三：Gunicorn 生产部署
 
 ```bash
-gunicorn wsgi:app -b 0.0.0.0:8080 --workers 4
+gunicorn wsgi:app -b 0.0.0.0:8808 --workers 4
 ```
 
 ## 测试
@@ -427,7 +428,7 @@ A: 请检查：
 - URL 是否正确编码
 
 ### Q: 如何修改端口号？
-A: 启动时指定端口参数：
+A: 修改 `start.sh` 中的 `HTTP_PORT` 变量，或启动时指定端口参数：
 ```bash
 python3 run.py --ngrok --http-port 9090
 ```

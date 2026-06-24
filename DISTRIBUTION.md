@@ -31,7 +31,7 @@ ngrok http 8443
 
 ### 一键启动脚本
 ```bash
-./tunnel.sh
+./start.sh
 ```
 
 ## 方案二：公网服务器

@@ -16,7 +16,6 @@ Thumbs.db
 .vscode
 .idea
 start.sh
-tunnel.sh
 DISTRIBUTION.md
 tests/
 README.md

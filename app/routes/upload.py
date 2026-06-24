@@ -81,8 +81,6 @@ def upload():
                         bundle_id = hap_meta['bundle_id']
                     if (not version or version == '1.0') and hap_meta.get('version'):
                         version = hap_meta['version']
-                    if hap_meta.get('build_number'):
-                        build_number = hap_meta['build_number']
             elif platform == 'android':
                 file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
                 apk_meta = parse_apk_metadata(file_path)
@@ -93,8 +91,6 @@ def upload():
                         bundle_id = apk_meta['bundle_id']
                     if (not version or version == '1.0') and apk_meta.get('version'):
                         version = apk_meta['version']
-                    if apk_meta.get('build_number'):
-                        build_number = apk_meta['build_number']
 
             if not build_number:
                 existing = db.execute(
