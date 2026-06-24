@@ -21,6 +21,6 @@ RUN mkdir -p uploads certs && \
 
 USER appuser
 
-EXPOSE 8080
+EXPOSE 8808
 
-CMD ["gunicorn", "wsgi:app", "-b", "0.0.0.0:8080", "--workers", "4"]
+CMD ["gunicorn", "wsgi:app", "-b", "0.0.0.0:8808", "--workers", "4"]
